@@ -85,6 +85,9 @@ class Visit(BaseModel):
     estado_visita: str = "completa"          # completa | pendiente | reagendada
     checkin_hora: Optional[str] = None       # hora exacta del check-in
     checkin_direccion: Optional[str] = None  # dirección del check-in GPS
+    hora_regreso: Optional[str] = None       # hora estimada de regreso (pendiente)
+    reagenda_fecha: Optional[str] = None     # fecha nueva (reagendada)
+    reagenda_hora: Optional[str] = None      # hora nueva (reagendada)
     synced: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -102,6 +105,9 @@ class VisitCreate(BaseModel):
     estado_visita: str = "completa"          # completa | pendiente | reagendada
     checkin_hora: Optional[str] = None
     checkin_direccion: Optional[str] = None
+    hora_regreso: Optional[str] = None
+    reagenda_fecha: Optional[str] = None
+    reagenda_hora: Optional[str] = None
 
 class VisitUpdate(BaseModel):
     medico_nombre: Optional[str] = None
@@ -111,6 +117,9 @@ class VisitUpdate(BaseModel):
     observaciones: Optional[str] = None
     foto_base64: Optional[str] = None
     estado_visita: Optional[str] = None     # completa | pendiente | reagendada
+    hora_regreso: Optional[str] = None
+    reagenda_fecha: Optional[str] = None
+    reagenda_hora: Optional[str] = None
 
 class VisitBatchSync(BaseModel):
     visits: List[VisitCreate]
