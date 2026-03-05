@@ -82,6 +82,9 @@ class Visit(BaseModel):
     ubicacion_lat: float
     ubicacion_lng: float
     foto_base64: Optional[str] = None
+    estado_visita: str = "completa"          # completa | pendiente | reagendada
+    checkin_hora: Optional[str] = None       # hora exacta del check-in
+    checkin_direccion: Optional[str] = None  # dirección del check-in GPS
     synced: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -96,6 +99,9 @@ class VisitCreate(BaseModel):
     ubicacion_lat: float
     ubicacion_lng: float
     foto_base64: Optional[str] = None
+    estado_visita: str = "completa"          # completa | pendiente | reagendada
+    checkin_hora: Optional[str] = None
+    checkin_direccion: Optional[str] = None
 
 class VisitUpdate(BaseModel):
     medico_nombre: Optional[str] = None
@@ -104,6 +110,7 @@ class VisitUpdate(BaseModel):
     tiempo_espera_minutos: Optional[int] = None
     observaciones: Optional[str] = None
     foto_base64: Optional[str] = None
+    estado_visita: Optional[str] = None     # completa | pendiente | reagendada
 
 class VisitBatchSync(BaseModel):
     visits: List[VisitCreate]
@@ -399,11 +406,35 @@ async def update_visit(visit_id: str, visit_update: VisitUpdate, current_user: U
     if not visit:
         raise HTTPException(status_code=404, detail="Visita no encontrada")
     
-    # Solo el visitador dueño puede actualizar
-    if visit['visitador_id'] != current_user.id:
+    # Solo el visitador dueño o admin puede actualizar
+    if visit['visitador_id'] != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="No tiene permisos para actualizar esta visita")
     
     update_data = visit_update.dict(exclude_unset=True)
+    if update_data:
+        await db.visits.update_one({"id": visit_id}, {"$set": update_data})
+    
+    updated_visit = await db.visits.find_one({"id": visit_id})
+    return Visit(**updated_visit)
+
+@visits_router.patch("/{visit_id}", response_model=Visit)
+async def patch_visit(visit_id: str, visit_update: VisitUpdate, current_user: User = Depends(get_current_user)):
+    """Actualización parcial de visita: estado, observaciones y acotaciones."""
+    visit = await db.visits.find_one({"id": visit_id})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
+    
+    # Solo el visitador dueño o admin puede editar
+    if visit['visitador_id'] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="No tiene permisos para editar esta visita")
+    
+    # Validar estado si viene en el payload
+    update_data = visit_update.dict(exclude_unset=True)
+    if "estado_visita" in update_data:
+        estados_validos = {"completa", "pendiente", "reagendada"}
+        if update_data["estado_visita"] not in estados_validos:
+            raise HTTPException(status_code=400, detail=f"Estado inválido. Usa: {estados_validos}")
+    
     if update_data:
         await db.visits.update_one({"id": visit_id}, {"$set": update_data})
     
