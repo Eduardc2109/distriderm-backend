@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -919,6 +920,20 @@ api_router.include_router(listas_router)
 api_router.include_router(reportes_router)
 
 app.include_router(api_router)
+
+# ── Servir dashboard estático ──────────────────────────────────────────────────
+import os
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    dashboard_path = STATIC_DIR / "dashboard.html"
+    if not dashboard_path.exists():
+        return HTMLResponse("<h1>Dashboard no encontrado</h1><p>Sube el archivo static/dashboard.html</p>", status_code=404)
+    return FileResponse(str(dashboard_path))
 
 # Middleware CORS
 app.add_middleware(
