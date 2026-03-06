@@ -41,6 +41,8 @@ visits_router = APIRouter(prefix="/visits", tags=["visits"])
 doctors_router = APIRouter(prefix="/doctors", tags=["doctors"])
 stats_router = APIRouter(prefix="/stats", tags=["stats"])
 users_router = APIRouter(prefix="/users", tags=["users"])
+listas_router = APIRouter(prefix="/listas", tags=["listas"])
+reportes_router = APIRouter(prefix="/reportes", tags=["reportes"])
 
 # =================
 # Modelos Pydantic
@@ -149,6 +151,68 @@ class Stats(BaseModel):
     tiempo_espera_promedio: float
     medicos_visitados: int
     visitadores_activos: int
+
+# ── Modelos para listas de médicos por ciudad/mes ──────────────────────────────
+
+class MedicoLista(BaseModel):
+    nombre: str
+    especialidad: str
+
+class ListaMedicos(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    visitador_id: str
+    visitador_name: str
+    ciudad: str
+    mes: int          # 1-12
+    anio: int
+    medicos: List[MedicoLista]
+    total: int
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ListaMedicosCreate(BaseModel):
+    ciudad: str
+    mes: int
+    anio: int
+    medicos: List[MedicoLista]
+
+# ── Modelos para reporte mensual ───────────────────────────────────────────────
+
+class MedicoReporte(BaseModel):
+    nombre: str
+    especialidad: str
+    visitado: bool
+    estado: Optional[str] = None   # completa | pendiente | reagendada | None
+    fecha_visita: Optional[str] = None
+
+class ReporteCiudad(BaseModel):
+    ciudad: str
+    total_lista: int
+    visitados: int
+    no_visitados: int
+    pendientes: int
+    reagendados: int
+    porcentaje_cumplimiento: float
+    medicos: List[MedicoReporte]
+
+class ReporteVisitador(BaseModel):
+    visitador_id: str
+    visitador_name: str
+    total_lista: int
+    visitados: int
+    no_visitados: int
+    pendientes: int
+    reagendados: int
+    porcentaje_cumplimiento: float
+    ciudades: List[ReporteCiudad]
+
+class ReporteMensual(BaseModel):
+    mes: int
+    anio: int
+    generado_en: datetime
+    total_visitadores: int
+    resumen_general: dict
+    visitadores: List[ReporteVisitador]
 
 # =================
 # Funciones de utilidad
@@ -612,6 +676,237 @@ async def get_user(user_id: str, current_user: User = Depends(get_current_admin)
     return User(**{k: v for k, v in user.items() if k != 'hashed_password'})
 
 # =================
+# Rutas de Listas de Médicos
+# =================
+
+@listas_router.post("/", response_model=ListaMedicos)
+async def guardar_lista_medicos(
+    lista_data: ListaMedicosCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Guarda o actualiza la lista de médicos de un visitador para una ciudad y mes."""
+    existing = await db.listas_medicos.find_one({
+        "visitador_id": current_user.id,
+        "ciudad": lista_data.ciudad,
+        "mes": lista_data.mes,
+        "anio": lista_data.anio,
+    })
+
+    lista_obj = ListaMedicos(
+        id=existing['id'] if existing else str(uuid.uuid4()),
+        visitador_id=current_user.id,
+        visitador_name=current_user.full_name,
+        ciudad=lista_data.ciudad,
+        mes=lista_data.mes,
+        anio=lista_data.anio,
+        medicos=lista_data.medicos,
+        total=len(lista_data.medicos),
+        created_at=existing['created_at'] if existing else datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    if existing:
+        await db.listas_medicos.update_one(
+            {"id": existing['id']},
+            {"$set": lista_obj.dict()}
+        )
+    else:
+        await db.listas_medicos.insert_one(lista_obj.dict())
+
+    return lista_obj
+
+
+@listas_router.get("/", response_model=List[ListaMedicos])
+async def get_listas(
+    mes: Optional[int] = None,
+    anio: Optional[int] = None,
+    ciudad: Optional[str] = None,
+    current_user: User = Depends(get_current_admin)
+):
+    """Obtiene todas las listas (solo admin)."""
+    query: dict = {}
+    if mes: query["mes"] = mes
+    if anio: query["anio"] = anio
+    if ciudad: query["ciudad"] = ciudad
+    listas = await db.listas_medicos.find(query).to_list(500)
+    return [ListaMedicos(**l) for l in listas]
+
+
+@listas_router.get("/mia", response_model=List[ListaMedicos])
+async def get_mi_lista(
+    mes: Optional[int] = None,
+    anio: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Obtiene las listas del visitador actual."""
+    query: dict = {"visitador_id": current_user.id}
+    if mes: query["mes"] = mes
+    if anio: query["anio"] = anio
+    listas = await db.listas_medicos.find(query).to_list(100)
+    return [ListaMedicos(**l) for l in listas]
+
+
+# =================
+# Rutas de Reportes Mensuales
+# =================
+
+@reportes_router.get("/mensual", response_model=ReporteMensual)
+async def get_reporte_mensual(
+    mes: int,
+    anio: int,
+    visitador_id: Optional[str] = None,
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Genera reporte mensual cruzando listas originales vs visitas realizadas.
+    Solo accesible por admin.
+    """
+    # Rango del mes
+    from calendar import monthrange
+    _, ultimo_dia = monthrange(anio, mes)
+    mes_inicio = datetime(anio, mes, 1, 0, 0, 0)
+    mes_fin = datetime(anio, mes, ultimo_dia, 23, 59, 59)
+
+    # Obtener listas del mes
+    query_listas: dict = {"mes": mes, "anio": anio}
+    if visitador_id:
+        query_listas["visitador_id"] = visitador_id
+
+    listas = await db.listas_medicos.find(query_listas).to_list(500)
+    if not listas:
+        raise HTTPException(status_code=404, detail="No hay listas registradas para este mes")
+
+    # Obtener visitas del mes
+    query_visits: dict = {"fecha": {"$gte": mes_inicio, "$lte": mes_fin}}
+    if visitador_id:
+        query_visits["visitador_id"] = visitador_id
+
+    visitas = await db.visits.find(query_visits).to_list(5000)
+
+    # Agrupar listas por visitador
+    listas_por_visitador: dict = {}
+    for lista in listas:
+        vid = lista['visitador_id']
+        if vid not in listas_por_visitador:
+            listas_por_visitador[vid] = {
+                'name': lista['visitador_name'],
+                'ciudades': {}
+            }
+        ciudad = lista['ciudad']
+        listas_por_visitador[vid]['ciudades'][ciudad] = lista['medicos']
+
+    # Agrupar visitas por visitador y normalizar nombres
+    visitas_por_visitador: dict = {}
+    for v in visitas:
+        vid = v['visitador_id']
+        if vid not in visitas_por_visitador:
+            visitas_por_visitador[vid] = {}
+        nombre_norm = v['medico_nombre'].lower().strip()
+        visitas_por_visitador[vid][nombre_norm] = {
+            'estado': v.get('estado_visita', 'completa'),
+            'fecha': v.get('fecha', '').isoformat()[:10] if v.get('fecha') else None,
+        }
+
+    # Construir reporte por visitador
+    reportes_visitadores = []
+    total_general = {'lista': 0, 'visitados': 0, 'no_visitados': 0, 'pendientes': 0, 'reagendados': 0}
+
+    for vid, data in listas_por_visitador.items():
+        mis_visitas = visitas_por_visitador.get(vid, {})
+        reporte_ciudades = []
+        v_total = v_visitados = v_no_visitados = v_pendientes = v_reagendados = 0
+
+        for ciudad, medicos in data['ciudades'].items():
+            med_reportes = []
+            c_visitados = c_no_visitados = c_pendientes = c_reagendados = 0
+
+            for med in medicos:
+                nombre_norm = med['nombre'].lower().strip()
+                if nombre_norm in mis_visitas:
+                    estado = mis_visitas[nombre_norm]['estado']
+                    fecha = mis_visitas[nombre_norm]['fecha']
+                    visitado = estado == 'completa'
+                    if estado == 'pendiente': c_pendientes += 1
+                    elif estado == 'reagendada': c_reagendados += 1
+                    else: c_visitados += 1
+                else:
+                    estado = None
+                    fecha = None
+                    visitado = False
+                    c_no_visitados += 1
+
+                med_reportes.append(MedicoReporte(
+                    nombre=med['nombre'],
+                    especialidad=med['especialidad'],
+                    visitado=visitado,
+                    estado=estado,
+                    fecha_visita=fecha,
+                ))
+
+            total_ciudad = len(medicos)
+            pct = round((c_visitados / total_ciudad * 100), 1) if total_ciudad > 0 else 0
+            reporte_ciudades.append(ReporteCiudad(
+                ciudad=ciudad,
+                total_lista=total_ciudad,
+                visitados=c_visitados,
+                no_visitados=c_no_visitados,
+                pendientes=c_pendientes,
+                reagendados=c_reagendados,
+                porcentaje_cumplimiento=pct,
+                medicos=med_reportes,
+            ))
+
+            v_total += total_ciudad
+            v_visitados += c_visitados
+            v_no_visitados += c_no_visitados
+            v_pendientes += c_pendientes
+            v_reagendados += c_reagendados
+
+        pct_v = round((v_visitados / v_total * 100), 1) if v_total > 0 else 0
+        reportes_visitadores.append(ReporteVisitador(
+            visitador_id=vid,
+            visitador_name=data['name'],
+            total_lista=v_total,
+            visitados=v_visitados,
+            no_visitados=v_no_visitados,
+            pendientes=v_pendientes,
+            reagendados=v_reagendados,
+            porcentaje_cumplimiento=pct_v,
+            ciudades=reporte_ciudades,
+        ))
+
+        total_general['lista'] += v_total
+        total_general['visitados'] += v_visitados
+        total_general['no_visitados'] += v_no_visitados
+        total_general['pendientes'] += v_pendientes
+        total_general['reagendados'] += v_reagendados
+
+    pct_general = round(
+        (total_general['visitados'] / total_general['lista'] * 100), 1
+    ) if total_general['lista'] > 0 else 0
+    total_general['porcentaje_cumplimiento'] = pct_general
+
+    # Ordenar por % cumplimiento descendente
+    reportes_visitadores.sort(key=lambda x: x.porcentaje_cumplimiento, reverse=True)
+
+    return ReporteMensual(
+        mes=mes,
+        anio=anio,
+        generado_en=datetime.utcnow(),
+        total_visitadores=len(reportes_visitadores),
+        resumen_general=total_general,
+        visitadores=reportes_visitadores,
+    )
+
+
+@reportes_router.get("/visitadores")
+async def get_visitadores_lista(current_user: User = Depends(get_current_admin)):
+    """Lista de visitadores con sus IDs para usar en filtros."""
+    users = await db.users.find({"role": "visitador", "is_active": True}).to_list(100)
+    return [{"id": u['id'], "nombre": u['full_name'], "username": u['username']} for u in users]
+
+
+# =================
 # Incluir routers
 # =================
 
@@ -620,6 +915,8 @@ api_router.include_router(visits_router)
 api_router.include_router(doctors_router)
 api_router.include_router(stats_router)
 api_router.include_router(users_router)
+api_router.include_router(listas_router)
+api_router.include_router(reportes_router)
 
 app.include_router(api_router)
 
