@@ -118,6 +118,53 @@
     .empty-icon { font-size: 64px; margin-bottom: 12px; }
 
     footer { text-align: center; padding: 20px; font-size: 12px; color: #aaa; }
+
+    /* ── Comparación de meses ── */
+    .tabs { display: flex; gap: 4px; background: #f0f4f8; padding: 4px; border-radius: 14px; margin-bottom: 24px; }
+    .tab-btn {
+      flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.2s;
+    }
+    .tab-btn.active { background: #fff; color: #007AFF; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .comparar-controls {
+      background: #fff; border-radius: 16px; padding: 20px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 24px;
+    }
+    .comparar-controls h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: #333; }
+    .meses-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px; }
+    .mes-panel { background: #f8f8f8; border-radius: 12px; padding: 14px; border: 2px solid transparent; }
+    .mes-panel.mes-a { border-color: #007AFF; }
+    .mes-panel.mes-b { border-color: #FF9800; }
+    .mes-panel label { font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; display: block; }
+    .mes-panel.mes-a label { color: #007AFF; }
+    .mes-panel.mes-b label { color: #FF9800; }
+    .mes-panel select { width: 100%; padding: 8px 12px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-weight: 600; background: #fff; outline: none; margin-bottom: 8px; }
+    .btn-comparar { background: linear-gradient(135deg, #007AFF, #FF9800); color: #fff; border: none; border-radius: 12px; padding: 12px 24px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; }
+    .btn-comparar:disabled { background: #aaa; }
+    .comparar-resultado { display: none; }
+    .comparar-header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .comparar-mes-card { border-radius: 14px; padding: 18px; text-align: center; }
+    .comparar-mes-card.card-a { background: #EFF6FF; border: 2px solid #007AFF; }
+    .comparar-mes-card.card-b { background: #FFF3E0; border: 2px solid #FF9800; }
+    .comparar-mes-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .comparar-mes-pct { font-size: 40px; font-weight: 800; }
+    .comparar-chart { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+    .comparar-chart h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .comparar-visitadores { display: flex; flex-direction: column; gap: 12px; }
+    .comparar-visitador-row { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .comparar-visitador-name { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .comparar-barras { display: flex; flex-direction: column; gap: 8px; }
+    .comparar-barra-row { display: flex; align-items: center; gap: 10px; }
+    .comparar-barra-label { font-size: 12px; font-weight: 600; width: 80px; }
+    .comparar-barra-wrap { flex: 1; background: #f0f0f0; border-radius: 6px; height: 18px; overflow: hidden; }
+    .comparar-barra-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 700; color: #fff; transition: width 0.6s ease; }
+    .comparar-flecha { font-size: 18px; }
+    .tabla-comparar { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .tabla-comparar th { background: #f5f5f5; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; }
+    .tabla-comparar td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+    .mejorado { color: #4CAF50; font-weight: 700; }
+    .empeorado { color: #F44336; font-weight: 700; }
+    .igual { color: #888; }
   </style>
 </head>
 <body>
@@ -169,6 +216,88 @@
         <select id="sel-visitador"><option value="">Todos</option></select>
       </div>
       <button class="btn-generar" onclick="generarReporte()">📊 Generar Reporte</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="cambiarTab('reporte', this)">📊 Reporte Mensual</button>
+      <button class="tab-btn" onclick="cambiarTab('comparar', this)">⚖️ Comparar Meses</button>
+    </div>
+
+    <!-- Panel comparar -->
+    <div id="panel-comparar" style="display:none">
+      <div class="comparar-controls">
+        <h3>⚖️ Comparar dos meses</h3>
+        <div class="meses-row">
+          <div class="mes-panel mes-a">
+            <label>🔵 Mes A</label>
+            <select id="comp-mes-a">
+              <option value="1">Enero</option><option value="2">Febrero</option>
+              <option value="3">Marzo</option><option value="4">Abril</option>
+              <option value="5">Mayo</option><option value="6">Junio</option>
+              <option value="7">Julio</option><option value="8">Agosto</option>
+              <option value="9">Septiembre</option><option value="10">Octubre</option>
+              <option value="11">Noviembre</option><option value="12">Diciembre</option>
+            </select>
+            <select id="comp-anio-a" style="width:100%;padding:8px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-weight:600;background:#fff;outline:none">
+              <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
+            </select>
+          </div>
+          <div class="mes-panel mes-b">
+            <label>🟠 Mes B</label>
+            <select id="comp-mes-b">
+              <option value="1">Enero</option><option value="2">Febrero</option>
+              <option value="3">Marzo</option><option value="4">Abril</option>
+              <option value="5">Mayo</option><option value="6">Junio</option>
+              <option value="7">Julio</option><option value="8">Agosto</option>
+              <option value="9">Septiembre</option><option value="10">Octubre</option>
+              <option value="11">Noviembre</option><option value="12">Diciembre</option>
+            </select>
+            <select id="comp-anio-b" style="width:100%;padding:8px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-weight:600;background:#fff;outline:none">
+              <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
+            </select>
+          </div>
+        </div>
+        <div class="control-group" style="margin-bottom:16px">
+          <label>Visitador (opcional)</label>
+          <select id="comp-visitador" style="min-width:100%"><option value="">Todos</option></select>
+        </div>
+        <button class="btn-comparar" onclick="generarComparacion()" id="btn-comp">⚖️ Comparar</button>
+      </div>
+
+      <div id="comp-loading" style="display:none;text-align:center;padding:40px">
+        <div class="spinner"></div><p>Cargando comparación...</p>
+      </div>
+
+      <div class="comparar-resultado" id="comparar-resultado">
+        <!-- Cabecera -->
+        <div class="comparar-header" id="comp-header"></div>
+
+        <!-- Gráfica comparativa -->
+        <div class="comparar-chart">
+          <h3>📊 Cumplimiento por visitador — comparación</h3>
+          <div style="position:relative;height:320px"><canvas id="chart-comparar"></canvas></div>
+        </div>
+
+        <!-- Detalle por visitador -->
+        <h2 style="font-size:17px;font-weight:700;margin-bottom:12px">👥 Detalle por visitador</h2>
+        <div class="comparar-visitadores" id="comp-visitadores"></div>
+
+        <!-- Tabla médicos no visitados en ambos meses -->
+        <div class="tabla-section" style="margin-top:20px">
+          <h3>⚠️ Médicos no visitados en ambos meses</h3>
+          <p class="sub">Médicos que aparecen como no visitados tanto en el mes A como en el mes B</p>
+          <div style="overflow-x:auto;margin-top:12px">
+            <table class="tabla-comparar">
+              <thead><tr><th>Médico</th><th>Especialidad</th><th>Ciudad</th><th>Visitador</th><th>Mes A</th><th>Mes B</th></tr></thead>
+              <tbody id="comp-tabla-body"></tbody>
+            </table>
+            <p id="comp-tabla-empty" style="display:none;text-align:center;padding:30px;color:#4CAF50;font-weight:600">
+              ✅ No hay médicos sin visitar en ambos meses
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="loading">
@@ -458,6 +587,181 @@
     document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     filtrarTabla();
+  }
+
+  // ── Tabs ────────────────────────────────────────────────────────────────────
+  function cambiarTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-comparar').style.display = tab === 'comparar' ? 'block' : 'none';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('empty-state').style.display = tab === 'reporte' && !reporteData ? 'block' : 'none';
+    document.getElementById('reporte-content').style.display = tab === 'reporte' && reporteData ? 'block' : 'none';
+    // Sincronizar selector de visitador
+    const selComp = document.getElementById('comp-visitador');
+    const selMain = document.getElementById('sel-visitador');
+    selComp.innerHTML = selMain.innerHTML;
+  }
+
+  // ── Comparación ─────────────────────────────────────────────────────────────
+  let chartComparar = null;
+
+  async function generarComparacion() {
+    const mesA = document.getElementById('comp-mes-a').value;
+    const anioA = document.getElementById('comp-anio-a').value;
+    const mesB = document.getElementById('comp-mes-b').value;
+    const anioB = document.getElementById('comp-anio-b').value;
+    const visitador = document.getElementById('comp-visitador').value;
+
+    document.getElementById('comp-loading').style.display = 'block';
+    document.getElementById('comparar-resultado').style.display = 'none';
+
+    try {
+      const fetchReporte = async (mes, anio) => {
+        let url = `${API}/api/reportes/mensual?mes=${mes}&anio=${anio}`;
+        if (visitador) url += `&visitador_id=${visitador}`;
+        const res = await fetch(url, { headers: authHeaders() });
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error();
+        return await res.json();
+      };
+
+      const [rA, rB] = await Promise.all([fetchReporte(mesA, anioA), fetchReporte(mesB, anioB)]);
+
+      if (!rA && !rB) { alert('No hay datos para ninguno de los dos meses seleccionados.'); return; }
+
+      renderComparacion(rA, rB, mesA, anioA, mesB, anioB);
+    } catch(e) {
+      alert('Error al cargar la comparación: ' + e.message);
+    } finally {
+      document.getElementById('comp-loading').style.display = 'none';
+    }
+  }
+
+  function renderComparacion(rA, rB, mesA, anioA, mesB, anioB) {
+    const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    document.getElementById('comparar-resultado').style.display = 'block';
+
+    const pctA = rA ? rA.resumen_general.porcentaje_cumplimiento : 0;
+    const pctB = rB ? rB.resumen_general.porcentaje_cumplimiento : 0;
+    const diff = (pctB - pctA).toFixed(1);
+    const flechaColor = diff > 0 ? '#4CAF50' : diff < 0 ? '#F44336' : '#888';
+    const flechaIcon = diff > 0 ? '📈' : diff < 0 ? '📉' : '➡️';
+
+    // Cabecera
+    document.getElementById('comp-header').innerHTML = `
+      <div class="comparar-mes-card card-a">
+        <div class="comparar-mes-title">🔵 ${MESES[mesA]} ${anioA}</div>
+        <div class="comparar-mes-pct" style="color:${colorPct(pctA)}">${pctA}%</div>
+        <div style="font-size:12px;color:#888;margin-top:4px">${rA ? rA.resumen_general.visitados + ' visitados de ' + rA.resumen_general.lista : 'Sin datos'}</div>
+      </div>
+      <div class="comparar-mes-card card-b">
+        <div class="comparar-mes-title" style="color:#FF9800">🟠 ${MESES[mesB]} ${anioB}</div>
+        <div class="comparar-mes-pct" style="color:${colorPct(pctB)}">${pctB}%</div>
+        <div style="font-size:12px;color:#888;margin-top:4px">${rB ? rB.resumen_general.visitados + ' visitados de ' + rB.resumen_general.lista : 'Sin datos'}</div>
+        <div style="font-size:14px;font-weight:700;color:${flechaColor};margin-top:6px">${flechaIcon} ${diff > 0 ? '+' : ''}${diff}% vs mes A</div>
+      </div>`;
+
+    // Gráfica comparativa
+    const visitadoresA = rA ? rA.visitadores : [];
+    const visitadoresB = rB ? rB.visitadores : [];
+    const nombresUnicos = [...new Set([...visitadoresA.map(v=>v.visitador_name), ...visitadoresB.map(v=>v.visitador_name)])];
+
+    if (chartComparar) chartComparar.destroy();
+    chartComparar = new Chart(document.getElementById('chart-comparar').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: nombresUnicos.map(n => n.split(' ')[0]),
+        datasets: [
+          {
+            label: `${MESES[mesA]} ${anioA}`,
+            data: nombresUnicos.map(n => {
+              const v = visitadoresA.find(v=>v.visitador_name===n);
+              return v ? v.porcentaje_cumplimiento : 0;
+            }),
+            backgroundColor: 'rgba(0,122,255,0.7)', borderColor: '#007AFF', borderWidth: 2,
+          },
+          {
+            label: `${MESES[mesB]} ${anioB}`,
+            data: nombresUnicos.map(n => {
+              const v = visitadoresB.find(v=>v.visitador_name===n);
+              return v ? v.porcentaje_cumplimiento : 0;
+            }),
+            backgroundColor: 'rgba(255,152,0,0.7)', borderColor: '#FF9800', borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}%` } } }
+      }
+    });
+
+    // Detalle por visitador
+    const compDiv = document.getElementById('comp-visitadores');
+    compDiv.innerHTML = nombresUnicos.map(nombre => {
+      const vA = visitadoresA.find(v=>v.visitador_name===nombre);
+      const vB = visitadoresB.find(v=>v.visitador_name===nombre);
+      const pA = vA ? vA.porcentaje_cumplimiento : 0;
+      const pB = vB ? vB.porcentaje_cumplimiento : 0;
+      const d = (pB - pA).toFixed(1);
+      const icono = d > 0 ? '📈' : d < 0 ? '📉' : '➡️';
+      const clsD = d > 0 ? 'mejorado' : d < 0 ? 'empeorado' : 'igual';
+      return `
+        <div class="comparar-visitador-row">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div class="comparar-visitador-name">${nombre}</div>
+            <div class="${clsD}" style="font-size:15px">${icono} ${d > 0 ? '+' : ''}${d}%</div>
+          </div>
+          <div class="comparar-barras">
+            <div class="comparar-barra-row">
+              <div class="comparar-barra-label" style="color:#007AFF">🔵 ${MESES[mesA]}</div>
+              <div class="comparar-barra-wrap">
+                <div class="comparar-barra-fill" style="width:${Math.min(pA,100)}%;background:#007AFF">${pA}%</div>
+              </div>
+            </div>
+            <div class="comparar-barra-row">
+              <div class="comparar-barra-label" style="color:#FF9800">🟠 ${MESES[mesB]}</div>
+              <div class="comparar-barra-wrap">
+                <div class="comparar-barra-fill" style="width:${Math.min(pB,100)}%;background:#FF9800">${pB}%</div>
+              </div>
+            </div>
+          </div>
+          ${vA && vB ? `<div style="font-size:12px;color:#888;margin-top:8px">
+            Visitados: <b style="color:#007AFF">${vA.visitados}</b> → <b style="color:#FF9800">${vB.visitados}</b> &nbsp;|&nbsp;
+            No visitados: <b style="color:#007AFF">${vA.no_visitados}</b> → <b style="color:#FF9800">${vB.no_visitados}</b>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+
+    // Tabla médicos no visitados en ambos meses
+    const noVisitadosA = new Set();
+    visitadoresA.forEach(v => v.ciudades.forEach(c => c.medicos.forEach(m => {
+      if (m.estado !== 'completa') noVisitadosA.add(`${v.visitador_name}|${c.ciudad}|${m.nombre}`);
+    })));
+
+    const filasBoth = [];
+    if (rB) rB.visitadores.forEach(v => v.ciudades.forEach(c => c.medicos.forEach(m => {
+      const key = `${v.visitador_name}|${c.ciudad}|${m.nombre}`;
+      if (m.estado !== 'completa' && noVisitadosA.has(key)) {
+        filasBoth.push({ nombre: m.nombre, especialidad: m.especialidad, ciudad: c.ciudad, visitador: v.visitador_name, estadoA: rA ? (rA.visitadores.find(vv=>vv.visitador_name===v.visitador_name)?.ciudades.find(cc=>cc.ciudad===c.ciudad)?.medicos.find(mm=>mm.nombre===m.nombre)?.estado || 'no_visitado') : 'sin datos', estadoB: m.estado || 'no_visitado' });
+      }
+    })));
+
+    const tbody = document.getElementById('comp-tabla-body');
+    const empty = document.getElementById('comp-tabla-empty');
+    if (filasBoth.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    const pillEstado = e => e === 'pendiente' ? '<span class="estado-pill pill-pendiente">⏱</span>' : e === 'reagendada' ? '<span class="estado-pill pill-reagendada">📅</span>' : '<span class="estado-pill pill-no-visitado">❌</span>';
+    tbody.innerHTML = filasBoth.map(f => `<tr>
+      <td><strong>${f.nombre}</strong></td>
+      <td style="color:#888">${f.especialidad}</td>
+      <td>📍 ${f.ciudad}</td>
+      <td>👤 ${f.visitador}</td>
+      <td>${pillEstado(f.estadoA)}</td>
+      <td>${pillEstado(f.estadoB)}</td>
+    </tr>`).join('');
   }
 </script>
 </body>
