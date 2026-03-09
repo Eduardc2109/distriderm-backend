@@ -911,6 +911,14 @@ async def get_visitadores_lista(current_user: User = Depends(get_current_admin))
 # Incluir routers
 # =================
 
+# ── Endpoint temporal de limpieza (solo admin) ───────────────────────────────
+@api_router.delete("/admin/limpiar-visitas-prueba")
+async def limpiar_visitas_prueba(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores")
+    result = await db.visits.delete_many({})
+    return {"eliminadas": result.deleted_count, "mensaje": "Visitas de prueba eliminadas correctamente"}
+
 api_router.include_router(auth_router)
 api_router.include_router(visits_router)
 api_router.include_router(doctors_router)
