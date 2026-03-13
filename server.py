@@ -522,6 +522,35 @@ async def delete_visit(visit_id: str, current_user: User = Depends(get_current_a
         raise HTTPException(status_code=404, detail="Visita no encontrada")
     return {"status": "deleted"}
 
+@visits_router.get("/ciudad/visitados-mes")
+async def get_medicos_visitados_mes(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Devuelve los nombres de médicos visitados este mes por CUALQUIER visitador.
+    Usado para sincronizar el historial entre tablets del mismo equipo.
+    """
+    ahora = datetime.utcnow()
+    inicio_mes = datetime(ahora.year, ahora.month, 1)
+    
+    visits = await db.visits.find({
+        "fecha": {"$gte": inicio_mes}
+    }).to_list(10000)
+    
+    # Devolver lista de nombres únicos visitados + quién los visitó + fecha
+    visitados = {}
+    for v in visits:
+        nombre = v.get("medico_nombre", "").strip()
+        if nombre:
+            if nombre not in visitados or v["fecha"] > visitados[nombre]["fecha"]:
+                visitados[nombre] = {
+                    "medico_nombre": nombre,
+                    "visitador_nombre": v.get("visitador_name", ""),
+                    "fecha": v["fecha"].isoformat() if hasattr(v["fecha"], "isoformat") else str(v["fecha"]),
+                }
+    
+    return list(visitados.values())
+
 # =================
 # Rutas de Médicos
 # =================
