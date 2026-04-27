@@ -158,6 +158,8 @@ class Stats(BaseModel):
 class MedicoLista(BaseModel):
     nombre: str
     especialidad: str
+    direccion: Optional[str] = None
+    id: Optional[str] = None
 
 class ListaMedicos(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -774,6 +776,70 @@ async def get_mi_lista(
     if anio: query["anio"] = anio
     listas = await db.listas_medicos.find(query).to_list(100)
     return [ListaMedicos(**l) for l in listas]
+
+@listas_router.get("/maestra", response_model=List[ListaMedicos])
+async def get_lista_maestra(
+    current_user: User = Depends(get_current_user)
+):
+    """Obtiene la lista más reciente del visitador por ciudad (sin filtro de mes)."""
+    listas = await db.listas_medicos.find(
+        {"visitador_id": current_user.id}
+    ).sort("updated_at", -1).to_list(500)
+    ciudades_vistas = set()
+    resultado = []
+    for lista in listas:
+        ciudad = lista.get("ciudad", "")
+        if ciudad not in ciudades_vistas:
+            ciudades_vistas.add(ciudad)
+            resultado.append(ListaMedicos(**lista))
+    return resultado
+
+@listas_router.post("/admin/subir")
+async def admin_subir_lista(
+    visitador_id: str,
+    lista_data: ListaMedicosCreate,
+    current_user: User = Depends(get_current_admin)
+):
+    """Admin sube/actualiza la lista de médicos de cualquier visitador."""
+    visitador = await db.users.find_one({"id": visitador_id})
+    if not visitador:
+        raise HTTPException(status_code=404, detail="Visitador no encontrado")
+
+    existing = await db.listas_medicos.find_one({
+        "visitador_id": visitador_id,
+        "ciudad": lista_data.ciudad,
+        "mes": lista_data.mes,
+        "anio": lista_data.anio,
+    })
+
+    medicos_con_id = []
+    for m in lista_data.medicos:
+        medico_dict = m.dict()
+        if not medico_dict.get("id"):
+            medico_dict["id"] = str(uuid.uuid4())
+        medicos_con_id.append(medico_dict)
+
+    lista_obj = ListaMedicos(
+        id=existing['id'] if existing else str(uuid.uuid4()),
+        visitador_id=visitador_id,
+        visitador_name=visitador.get('full_name', ''),
+        ciudad=lista_data.ciudad,
+        mes=lista_data.mes,
+        anio=lista_data.anio,
+        medicos=[MedicoLista(**m) for m in medicos_con_id],
+        total=len(medicos_con_id),
+        created_at=existing['created_at'] if existing else datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    if existing:
+        await db.listas_medicos.update_one(
+            {"id": existing['id']}, {"$set": lista_obj.dict()}
+        )
+    else:
+        await db.listas_medicos.insert_one(lista_obj.dict())
+
+    return {"mensaje": f"Lista actualizada — {visitador.get('full_name')} — {lista_data.ciudad} — {len(medicos_con_id)} médicos"}
 
 
 # =================
