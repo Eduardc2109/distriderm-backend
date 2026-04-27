@@ -78,6 +78,63 @@
     @media (max-width: 700px) { .charts-row { grid-template-columns: 1fr; } }
     .chart-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #fff; padding: 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; }
+    .tab-btn.active { background: #007AFF; color: #fff; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .listas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 700px) { .listas-grid { grid-template-columns: 1fr; } }
+    .lista-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .lista-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 6px; }
+    .form-group select, .form-group input { width: 100%; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; outline: none; }
+    .drop-zone { border: 2px dashed #007AFF; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; color: #007AFF; font-weight: 600; background: #f0f7ff; margin-bottom: 14px; }
+    .drop-zone.has-file { background: #e6f4ea; border-color: #34A853; color: #34A853; }
+    .btn-upload { width: 100%; background: #34A853; color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-upload:disabled { background: #aaa; }
+    .upload-result { margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 14px; display: none; }
+    .upload-result.ok { background: #e6f4ea; color: #1e7e34; }
+    .upload-result.err { background: #fdecea; color: #c0392b; }
+    .lista-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 10px; background: #f8f8f8; margin-bottom: 8px; }
+    .lista-item-info { font-size: 14px; font-weight: 600; color: #333; }
+    .lista-item-sub { font-size: 12px; color: #888; margin-top: 2px; }
+    .lista-item-badge { background: #007AFF22; color: #007AFF; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #fff; padding: 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.2s; }
+    .tab-btn.active { background: #007AFF; color: #fff; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Listas */
+    .listas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 700px) { .listas-grid { grid-template-columns: 1fr; } }
+    .lista-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .lista-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #333; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 6px; }
+    .form-group select, .form-group input { width: 100%; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; outline: none; }
+    .form-group select:focus, .form-group input:focus { border-color: #007AFF; }
+    .drop-zone {
+      border: 2px dashed #007AFF; border-radius: 12px; padding: 32px;
+      text-align: center; cursor: pointer; color: #007AFF; font-weight: 600;
+      background: #f0f7ff; transition: background 0.2s; margin-bottom: 14px;
+    }
+    .drop-zone:hover { background: #e0f0ff; }
+    .drop-zone.has-file { background: #e6f4ea; border-color: #34A853; color: #34A853; }
+    .btn-upload { width: 100%; background: #34A853; color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-upload:disabled { background: #aaa; }
+    .upload-result { margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 14px; display: none; }
+    .upload-result.ok { background: #e6f4ea; color: #1e7e34; }
+    .upload-result.err { background: #fdecea; color: #c0392b; }
+    .listas-existentes { margin-top: 8px; }
+    .lista-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 10px; background: #f8f8f8; margin-bottom: 8px; }
+    .lista-item-info { font-size: 14px; font-weight: 600; color: #333; }
+    .lista-item-sub { font-size: 12px; color: #888; margin-top: 2px; }
+    .lista-item-badge { background: #007AFF22; color: #007AFF; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; }
     .chart-wrap { position: relative; height: 280px; }
 
     .visitadores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -148,6 +205,14 @@
 <div id="main-panel">
   <div class="container">
 
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('reporte', this)">📊 Reporte Mensual</button>
+      <button class="tab-btn" onclick="switchTab('listas', this)">📋 Gestión de Listas</button>
+    </div>
+
+    <!-- Tab Reporte -->
+    <div id="tab-reporte" class="tab-panel active">
     <div class="controls">
       <div class="control-group">
         <label>Mes</label>
@@ -218,7 +283,39 @@
           </p>
         </div>
       </div>
-    </div>
+    </div><!-- /tab-reporte -->
+
+    <!-- Tab Listas -->
+    <div id="tab-listas" class="tab-panel">
+      <div class="listas-grid">
+        <div class="lista-card">
+          <h3>⬆️ Subir lista de médicos</h3>
+          <div class="form-group">
+            <label>Visitador</label>
+            <select id="lista-visitador"><option value="">— Selecciona visitador —</option></select>
+          </div>
+          <div class="form-group">
+            <label>Ciudad</label>
+            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." />
+          </div>
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+            <div style="font-size:32px;margin-bottom:8px">📄</div>
+            <div id="drop-zone-text">Haz clic para seleccionar el CSV</div>
+            <div style="font-size:12px;color:#888;margin-top:4px">Columnas: Nombre, Especialidad, Dirección</div>
+          </div>
+          <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="archivoSeleccionado(this)" />
+          <button class="btn-upload" id="btn-subir" onclick="subirLista()" disabled>Subir Lista</button>
+          <div class="upload-result" id="upload-result"></div>
+        </div>
+        <div class="lista-card">
+          <h3>📂 Listas en el servidor</h3>
+          <div class="listas-existentes" id="listas-existentes">
+            <p style="color:#888;text-align:center;padding:20px">Selecciona la pestaña para cargar</p>
+          </div>
+        </div>
+      </div>
+    </div><!-- /tab-listas -->
+
   </div>
   <footer>Distriderm &copy; 2025 &mdash; Dashboard de Supervisión</footer>
 </div>
@@ -458,6 +555,124 @@
     document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     filtrarTabla();
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    btn.classList.add('active');
+    if (tab === 'listas') cargarListasPanel();
+  }
+
+  // ── Gestión de listas ──────────────────────────────────────────────────────
+  let csvData = null;
+
+  async function cargarListasPanel() {
+    try {
+      const res = await fetch(`${API}/api/users/`, { headers: authHeaders() });
+      const users = await res.json();
+      const sel = document.getElementById('lista-visitador');
+      sel.innerHTML = '<option value="">— Selecciona visitador —</option>';
+      users.filter(u => u.role === 'visitador').forEach(u => {
+        sel.innerHTML += `<option value="${u.id}">${u.full_name}</option>`;
+      });
+    } catch(e) { console.error(e); }
+
+    try {
+      const res = await fetch(`${API}/api/listas/`, { headers: authHeaders() });
+      const listas = await res.json();
+      const cont = document.getElementById('listas-existentes');
+      if (!listas.length) {
+        cont.innerHTML = '<p style="color:#888;text-align:center;padding:20px">Sin listas cargadas</p>';
+        return;
+      }
+      cont.innerHTML = listas.map(l => `
+        <div class="lista-item">
+          <div>
+            <div class="lista-item-info">${l.visitador_name}</div>
+            <div class="lista-item-sub">📍 ${l.ciudad} · Actualizado: ${new Date(l.updated_at).toLocaleDateString('es')}</div>
+          </div>
+          <span class="lista-item-badge">${l.total} médicos</span>
+        </div>
+      `).join('');
+    } catch(e) {
+      document.getElementById('listas-existentes').innerHTML = '<p style="color:red">Error cargando listas</p>';
+    }
+  }
+
+  function archivoSeleccionado(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const sep = lines[0].includes('\t') ? '\t' : ',';
+      const clean = s => s.replace(/^["']|["']$/g, '').trim();
+      csvData = [];
+      for (let i = 0; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(clean);
+        const nombre = vals[0];
+        if (nombre && nombre.length > 1) {
+          csvData.push({ nombre, especialidad: vals[1] || 'No especificada', direccion: vals[2] || null });
+        }
+      }
+      document.getElementById('drop-zone').classList.add('has-file');
+      document.getElementById('drop-zone-text').textContent = `✅ ${file.name} — ${csvData.length} médicos`;
+      document.getElementById('btn-subir').disabled = false;
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  async function subirLista() {
+    const visitadorId = document.getElementById('lista-visitador').value;
+    const ciudad = document.getElementById('lista-ciudad').value.trim();
+    const result = document.getElementById('upload-result');
+    if (!visitadorId) { alert('Selecciona un visitador'); return; }
+    if (!ciudad) { alert('Ingresa la ciudad'); return; }
+    if (!csvData || csvData.length === 0) { alert('Selecciona un CSV válido'); return; }
+
+    document.getElementById('btn-subir').disabled = true;
+    document.getElementById('btn-subir').textContent = 'Subiendo...';
+    result.style.display = 'none';
+
+    try {
+      const ahora = new Date();
+      const res = await fetch(`${API}/api/listas/admin/subir?visitador_id=${visitadorId}`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ciudad,
+          mes: ahora.getMonth() + 1,
+          anio: ahora.getFullYear(),
+          medicos: csvData,
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        result.className = 'upload-result ok';
+        result.textContent = '✅ ' + data.mensaje;
+        result.style.display = 'block';
+        csvData = null;
+        document.getElementById('csv-input').value = '';
+        document.getElementById('drop-zone').classList.remove('has-file');
+        document.getElementById('drop-zone-text').textContent = 'Haz clic para seleccionar el CSV';
+        document.getElementById('lista-ciudad').value = '';
+        document.getElementById('lista-visitador').value = '';
+        cargarListasPanel();
+      } else {
+        throw new Error(data.detail || 'Error desconocido');
+      }
+    } catch(e) {
+      result.className = 'upload-result err';
+      result.textContent = '❌ Error: ' + e.message;
+      result.style.display = 'block';
+    } finally {
+      document.getElementById('btn-subir').disabled = false;
+      document.getElementById('btn-subir').textContent = 'Subir Lista';
+    }
   }
 </script>
 </body>
