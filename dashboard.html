@@ -254,7 +254,7 @@
     </div><!-- /tab-reporte -->
 
     <!-- Tab Listas -->
-    <div id="tab-listas" class="tab-panel">
+    <div id="tab-listas" class="tab-panel" style="min-height:400px">
       <div class="listas-grid">
         <div class="lista-card">
           <h3>⬆️ Subir lista de médicos</h3>
@@ -528,8 +528,13 @@
   // ── Tabs ───────────────────────────────────────────────────────────────────
   function switchTab(tab, btn) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('tab-' + tab).classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
+    const panel = document.getElementById('tab-' + tab);
+    panel.classList.add('active');
+    panel.style.display = 'block';
     btn.classList.add('active');
     if (tab === 'listas') cargarListasPanel();
   }
