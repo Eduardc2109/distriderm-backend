@@ -255,32 +255,39 @@
 
     <!-- Tab Listas -->
     <div id="tab-listas" class="tab-panel" style="min-height:400px">
-      <div class="listas-grid">
-        <div class="lista-card">
-          <h3>⬆️ Subir lista de médicos</h3>
-          <div class="form-group">
-            <label>Visitador</label>
-            <select id="lista-visitador"><option value="">— Selecciona visitador —</option></select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+        <!-- Subir lista -->
+        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">⬆️ Subir lista de médicos</h3>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Visitador</label>
+            <select id="lista-visitador" style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px">
+              <option value="">— Selecciona visitador —</option>
+            </select>
           </div>
-          <div class="form-group">
-            <label>Ciudad</label>
-            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." />
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Ciudad</label>
+            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box" />
           </div>
-          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+          <div id="drop-zone" onclick="document.getElementById('csv-input').click()" style="border:2px dashed #007AFF;border-radius:12px;padding:32px;text-align:center;cursor:pointer;color:#007AFF;font-weight:600;background:#f0f7ff;margin-bottom:14px">
             <div style="font-size:32px;margin-bottom:8px">📄</div>
             <div id="drop-zone-text">Haz clic para seleccionar el CSV</div>
             <div style="font-size:12px;color:#888;margin-top:4px">Columnas: Nombre, Especialidad, Dirección</div>
           </div>
           <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="archivoSeleccionado(this)" />
-          <button class="btn-upload" id="btn-subir" onclick="subirLista()" disabled>Subir Lista</button>
-          <div class="upload-result" id="upload-result"></div>
+          <button id="btn-subir" onclick="subirLista()" disabled style="width:100%;background:#34A853;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Subir Lista</button>
+          <div id="upload-result" style="display:none;margin-top:12px;padding:12px;border-radius:10px;font-size:14px"></div>
         </div>
-        <div class="lista-card">
-          <h3>📂 Listas en el servidor</h3>
-          <div class="listas-existentes" id="listas-existentes">
-            <p style="color:#888;text-align:center;padding:20px">Selecciona la pestaña para cargar</p>
+
+        <!-- Listas existentes -->
+        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">📂 Listas en el servidor</h3>
+          <div id="listas-existentes">
+            <p style="color:#888;text-align:center;padding:20px">Cargando...</p>
           </div>
         </div>
+
       </div>
     </div><!-- /tab-listas -->
 
