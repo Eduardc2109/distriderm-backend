@@ -81,8 +81,7 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #fff; padding: 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; }
     .tab-btn.active { background: #007AFF; color: #fff; }
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
+    /* tabs manejados por JS */
     .listas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 700px) { .listas-grid { grid-template-columns: 1fr; } }
     .lista-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
@@ -180,7 +179,7 @@
     </div>
 
     <!-- Tab Reporte -->
-    <div id="tab-reporte" class="tab-panel active">
+    <div id="tab-reporte" style="display:block">
     <div class="controls">
       <div class="control-group">
         <label>Mes</label>
@@ -254,7 +253,7 @@
     </div><!-- /tab-reporte -->
 
     <!-- Tab Listas -->
-    <div id="tab-listas" class="tab-panel" style="min-height:400px;width:100%;box-sizing:border-box;padding:0 16px">
+    <div id="tab-listas" style="display:none;min-height:400px;width:100%;box-sizing:border-box;padding:0 16px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;box-sizing:border-box">
 
         <!-- Subir lista -->
@@ -534,14 +533,14 @@
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   function switchTab(tab, btn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => {
-      p.classList.remove('active');
-      p.style.display = 'none';
+    // Ocultar todos los tabs
+    ['tab-reporte', 'tab-listas'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
     });
-    const panel = document.getElementById('tab-' + tab);
-    panel.classList.add('active');
-    panel.style.display = 'block';
+    // Mostrar el seleccionado
+    document.getElementById('tab-' + tab).style.display = 'block';
+    // Actualizar botones
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     if (tab === 'listas') cargarListasPanel();
   }
