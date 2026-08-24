@@ -81,7 +81,6 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #fff; padding: 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; }
     .tab-btn.active { background: #007AFF; color: #fff; }
-    /* tabs manejados por JS */
     .listas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 700px) { .listas-grid { grid-template-columns: 1fr; } }
     .lista-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
@@ -101,7 +100,6 @@
     .lista-item-sub { font-size: 12px; color: #888; margin-top: 2px; }
     .lista-item-badge { background: #007AFF22; color: #007AFF; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; }
 
-    /* Tabs */
     .chart-wrap { position: relative; height: 280px; }
 
     .visitadores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -253,40 +251,33 @@
     </div><!-- /tab-reporte -->
 
     <!-- Tab Listas -->
-    <div id="tab-listas" style="display:none;min-height:400px;width:100%;box-sizing:border-box;padding:0 16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;box-sizing:border-box">
-
-        <!-- Subir lista -->
-        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
-          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">⬆️ Subir lista de médicos</h3>
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Visitador</label>
-            <select id="lista-visitador" style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px">
-              <option value="">— Selecciona visitador —</option>
-            </select>
+    <div id="tab-listas" style="display:none">
+      <div class="listas-grid">
+        <div class="lista-card">
+          <h3>⬆️ Subir lista de médicos</h3>
+          <div class="form-group">
+            <label>Visitador</label>
+            <select id="lista-visitador"><option value="">— Selecciona visitador —</option></select>
           </div>
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Ciudad</label>
-            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box" />
+          <div class="form-group">
+            <label>Ciudad</label>
+            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." />
           </div>
-          <div id="drop-zone" onclick="document.getElementById('csv-input').click()" style="border:2px dashed #007AFF;border-radius:12px;padding:32px;text-align:center;cursor:pointer;color:#007AFF;font-weight:600;background:#f0f7ff;margin-bottom:14px">
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
             <div style="font-size:32px;margin-bottom:8px">📄</div>
             <div id="drop-zone-text">Haz clic para seleccionar el CSV</div>
             <div style="font-size:12px;color:#888;margin-top:4px">Columnas: Nombre, Especialidad, Dirección</div>
           </div>
           <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="archivoSeleccionado(this)" />
-          <button id="btn-subir" onclick="subirLista()" disabled style="width:100%;background:#34A853;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Subir Lista</button>
-          <div id="upload-result" style="display:none;margin-top:12px;padding:12px;border-radius:10px;font-size:14px"></div>
+          <button class="btn-upload" id="btn-subir" onclick="subirLista()" disabled>Subir Lista</button>
+          <div class="upload-result" id="upload-result"></div>
         </div>
-
-        <!-- Listas existentes -->
-        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
-          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">📂 Listas en el servidor</h3>
-          <div id="listas-existentes">
-            <p style="color:#888;text-align:center;padding:20px">Cargando...</p>
+        <div class="lista-card">
+          <h3>📂 Listas en el servidor</h3>
+          <div class="listas-existentes" id="listas-existentes">
+            <p style="color:#888;text-align:center;padding:20px">Selecciona la pestaña para cargar</p>
           </div>
         </div>
-
       </div>
     </div><!-- /tab-listas -->
 
@@ -533,13 +524,8 @@
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   function switchTab(tab, btn) {
-    // Ocultar todos los tabs
-    ['tab-reporte', 'tab-listas'].forEach(id => {
-      document.getElementById(id).style.display = 'none';
-    });
-    // Mostrar el seleccionado
-    document.getElementById('tab-' + tab).style.display = 'block';
-    // Actualizar botones
+    document.getElementById('tab-reporte').style.display = (tab === 'reporte') ? 'block' : 'none';
+    document.getElementById('tab-listas').style.display = (tab === 'listas') ? 'block' : 'none';
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     if (tab === 'listas') cargarListasPanel();
