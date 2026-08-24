@@ -179,6 +179,30 @@ class ListaMedicosCreate(BaseModel):
     anio: int
     medicos: List[MedicoLista]
 
+# ── Normalización para evitar duplicados por variaciones de escritura ─────────
+def normalizar_ciudad(nombre: str) -> str:
+    """'quito ', 'QUITO', 'Quito' → 'Quito' (mismo formato siempre)."""
+    limpio = " ".join(nombre.strip().split())  # colapsa espacios múltiples
+    return limpio.title() if limpio else limpio
+
+def normalizar_nombre_medico(nombre: str) -> str:
+    """Colapsa espacios y trim, para comparar sin duplicar por escritura."""
+    return " ".join(nombre.strip().split())
+
+def deduplicar_medicos(medicos: list) -> list:
+    """Quita médicos duplicados por nombre normalizado, conserva el primero."""
+    vistos = set()
+    resultado = []
+    for m in medicos:
+        m_dict = m.dict() if hasattr(m, "dict") else dict(m)
+        clave = normalizar_nombre_medico(m_dict.get("nombre", "")).lower()
+        if not clave or clave in vistos:
+            continue
+        vistos.add(clave)
+        m_dict["nombre"] = normalizar_nombre_medico(m_dict.get("nombre", ""))
+        resultado.append(m_dict)
+    return resultado
+
 # ── Modelos para reporte mensual ───────────────────────────────────────────────
 
 class MedicoReporte(BaseModel):
@@ -717,9 +741,12 @@ async def guardar_lista_medicos(
     current_user: User = Depends(get_current_user)
 ):
     """Guarda o actualiza la lista de médicos de un visitador para una ciudad y mes."""
+    ciudad_norm = normalizar_ciudad(lista_data.ciudad)
+    medicos_dedup = deduplicar_medicos(lista_data.medicos)
+
     existing = await db.listas_medicos.find_one({
         "visitador_id": current_user.id,
-        "ciudad": lista_data.ciudad,
+        "ciudad": ciudad_norm,
         "mes": lista_data.mes,
         "anio": lista_data.anio,
     })
@@ -728,11 +755,11 @@ async def guardar_lista_medicos(
         id=existing['id'] if existing else str(uuid.uuid4()),
         visitador_id=current_user.id,
         visitador_name=current_user.full_name,
-        ciudad=lista_data.ciudad,
+        ciudad=ciudad_norm,
         mes=lista_data.mes,
         anio=lista_data.anio,
-        medicos=lista_data.medicos,
-        total=len(lista_data.medicos),
+        medicos=[MedicoLista(**m) for m in medicos_dedup],
+        total=len(medicos_dedup),
         created_at=existing['created_at'] if existing else datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
@@ -805,25 +832,27 @@ async def admin_subir_lista(
     if not visitador:
         raise HTTPException(status_code=404, detail="Visitador no encontrado")
 
+    ciudad_norm = normalizar_ciudad(lista_data.ciudad)
+    medicos_dedup = deduplicar_medicos(lista_data.medicos)
+
     existing = await db.listas_medicos.find_one({
         "visitador_id": visitador_id,
-        "ciudad": lista_data.ciudad,
+        "ciudad": ciudad_norm,
         "mes": lista_data.mes,
         "anio": lista_data.anio,
     })
 
     medicos_con_id = []
-    for m in lista_data.medicos:
-        medico_dict = m.dict()
-        if not medico_dict.get("id"):
-            medico_dict["id"] = str(uuid.uuid4())
-        medicos_con_id.append(medico_dict)
+    for m in medicos_dedup:
+        if not m.get("id"):
+            m["id"] = str(uuid.uuid4())
+        medicos_con_id.append(m)
 
     lista_obj = ListaMedicos(
         id=existing['id'] if existing else str(uuid.uuid4()),
         visitador_id=visitador_id,
         visitador_name=visitador.get('full_name', ''),
-        ciudad=lista_data.ciudad,
+        ciudad=ciudad_norm,
         mes=lista_data.mes,
         anio=lista_data.anio,
         medicos=[MedicoLista(**m) for m in medicos_con_id],
@@ -839,7 +868,12 @@ async def admin_subir_lista(
     else:
         await db.listas_medicos.insert_one(lista_obj.dict())
 
-    return {"mensaje": f"Lista actualizada — {visitador.get('full_name')} — {lista_data.ciudad} — {len(medicos_con_id)} médicos"}
+    duplicados_removidos = len(lista_data.medicos) - len(medicos_dedup)
+    msg = f"Lista actualizada — {visitador.get('full_name')} — {ciudad_norm} — {len(medicos_con_id)} médicos"
+    if duplicados_removidos > 0:
+        msg += f" ({duplicados_removidos} duplicados omitidos)"
+
+    return {"mensaje": msg}
 
 @listas_router.get("/{lista_id}", response_model=ListaMedicos)
 async def get_lista_detalle(
@@ -863,12 +897,12 @@ async def actualizar_lista(
     if not lista:
         raise HTTPException(status_code=404, detail="Lista no encontrada")
 
+    medicos_dedup = deduplicar_medicos(medicos)
     medicos_con_id = []
-    for m in medicos:
-        medico_dict = m.dict()
-        if not medico_dict.get("id"):
-            medico_dict["id"] = str(uuid.uuid4())
-        medicos_con_id.append(medico_dict)
+    for m in medicos_dedup:
+        if not m.get("id"):
+            m["id"] = str(uuid.uuid4())
+        medicos_con_id.append(m)
 
     await db.listas_medicos.update_one(
         {"id": lista_id},
@@ -878,7 +912,11 @@ async def actualizar_lista(
             "updated_at": datetime.utcnow(),
         }}
     )
-    return {"mensaje": f"Lista actualizada — {len(medicos_con_id)} médicos"}
+    duplicados_removidos = len(medicos) - len(medicos_dedup)
+    msg = f"Lista actualizada — {len(medicos_con_id)} médicos"
+    if duplicados_removidos > 0:
+        msg += f" ({duplicados_removidos} duplicados omitidos)"
+    return {"mensaje": msg}
 
 @listas_router.delete("/{lista_id}")
 async def eliminar_lista(
@@ -890,6 +928,73 @@ async def eliminar_lista(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lista no encontrada")
     return {"mensaje": "Lista eliminada correctamente"}
+
+@listas_router.post("/admin/limpiar-duplicados")
+async def limpiar_duplicados(
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Detecta listas duplicadas (mismo visitador + ciudad normalizada + mes + año)
+    y las fusiona en una sola, conservando la más reciente y uniendo médicos sin repetir.
+    También normaliza nombres de ciudad ya guardados con variaciones de escritura.
+    """
+    todas = await db.listas_medicos.find({}).to_list(5000)
+    grupos: dict = {}
+
+    for lista in todas:
+        ciudad_norm = normalizar_ciudad(lista.get("ciudad", ""))
+        clave = (lista["visitador_id"], ciudad_norm, lista["mes"], lista["anio"])
+        grupos.setdefault(clave, []).append(lista)
+
+    fusionadas = 0
+    normalizadas = 0
+    eliminadas_ids = []
+
+    for (visitador_id, ciudad_norm, mes, anio), listas_grupo in grupos.items():
+        if len(listas_grupo) == 1:
+            # Sin duplicado — solo normalizar el nombre de ciudad si hacía falta
+            unica = listas_grupo[0]
+            if unica.get("ciudad") != ciudad_norm:
+                await db.listas_medicos.update_one(
+                    {"id": unica["id"]}, {"$set": {"ciudad": ciudad_norm}}
+                )
+                normalizadas += 1
+            continue
+
+        # Hay duplicados — ordenar por más reciente primero
+        listas_grupo.sort(key=lambda l: l.get("updated_at", datetime.min), reverse=True)
+        principal = listas_grupo[0]
+        resto = listas_grupo[1:]
+
+        # Unir médicos de todas, deduplicando por nombre
+        todos_medicos = list(principal.get("medicos", []))
+        for otra in resto:
+            todos_medicos.extend(otra.get("medicos", []))
+
+        medicos_dedup = deduplicar_medicos([MedicoLista(**m) for m in todos_medicos])
+
+        await db.listas_medicos.update_one(
+            {"id": principal["id"]},
+            {"$set": {
+                "ciudad": ciudad_norm,
+                "medicos": medicos_dedup,
+                "total": len(medicos_dedup),
+                "updated_at": datetime.utcnow(),
+            }}
+        )
+
+        for otra in resto:
+            await db.listas_medicos.delete_one({"id": otra["id"]})
+            eliminadas_ids.append(otra["id"])
+
+        fusionadas += 1
+
+    return {
+        "mensaje": f"{fusionadas} grupos de listas duplicadas fusionados, {normalizadas} nombres de ciudad corregidos, {len(eliminadas_ids)} listas eliminadas",
+        "fusionadas": fusionadas,
+        "normalizadas": normalizadas,
+        "eliminadas": len(eliminadas_ids),
+    }
 
 
 # =================
