@@ -120,7 +120,7 @@
   .modal-foot { padding: 16px 22px; border-top: 1px solid #eee; display: flex; gap: 10px; }
 
   .medico-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px;
+    display: grid; grid-template-columns: 1.2fr 1fr 1.2fr 0.9fr auto; gap: 8px;
     margin-bottom: 8px; align-items: center;
   }
   .medico-row input {
@@ -186,7 +186,7 @@
         <div class="drop" id="drop-zone" onclick="document.getElementById('csv-input').click()">
           <div style="font-size:30px;margin-bottom:6px">📄</div>
           <div id="drop-text">Haz clic para seleccionar el CSV</div>
-          <div class="sub">Columnas: Nombre, Especialidad, Dirección (opcional) — sin encabezados</div>
+          <div class="sub">Columnas: Nombre, Especialidad, Dirección, Teléfono — sin encabezados</div>
         </div>
         <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="onFile(this)" />
 
@@ -426,6 +426,7 @@
         <input type="text" placeholder="Nombre" value="${(m.nombre||'').replace(/"/g,'&quot;')}" oninput="medicosEditando[${i}].nombre=this.value" />
         <input type="text" placeholder="Especialidad" value="${(m.especialidad||'').replace(/"/g,'&quot;')}" oninput="medicosEditando[${i}].especialidad=this.value" />
         <input type="text" placeholder="Dirección" value="${(m.direccion||'').replace(/"/g,'&quot;')}" oninput="medicosEditando[${i}].direccion=this.value" />
+        <input type="text" placeholder="Teléfono" value="${(m.telefono||'').replace(/"/g,'&quot;')}" oninput="medicosEditando[${i}].telefono=this.value" />
         <button onclick="eliminarMedicoEditor(${i})" title="Quitar">✕</button>
       `;
       cont.appendChild(row);
@@ -443,7 +444,7 @@
   }
 
   function agregarMedicoEditor() {
-    medicosEditando.push({ nombre: '', especialidad: '', direccion: '' });
+    medicosEditando.push({ nombre: '', especialidad: '', direccion: '', telefono: '' });
     renderEditor();
   }
 
@@ -501,6 +502,7 @@
             nombre,
             especialidad: vals[1] || 'No especificada',
             direccion: vals[2] || null,
+            telefono: vals[3] || null,
           });
         }
       }
