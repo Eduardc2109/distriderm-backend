@@ -156,7 +156,12 @@
 <div id="app" style="display:none">
   <div class="topbar">
     <h1>📋 Gestión de Listas de Médicos</h1>
-    <a href="/dashboard">← Volver al Dashboard</a>
+    <div style="display:flex;gap:16px;align-items:center">
+      <button onclick="limpiarDuplicados()" style="background:#FFF3E0;color:#E65100;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+        🧹 Limpiar duplicados
+      </button>
+      <a href="/dashboard">← Volver al Dashboard</a>
+    </div>
   </div>
 
   <div class="wrap">
@@ -174,7 +179,8 @@
 
         <div class="field">
           <label>Ciudad</label>
-          <input type="text" id="inp-ciudad" placeholder="Ej: Quito, Guayaquil..." />
+          <input type="text" id="inp-ciudad" placeholder="Ej: Quito, Guayaquil..." list="ciudades-datalist" />
+          <datalist id="ciudades-datalist"></datalist>
         </div>
 
         <div class="drop" id="drop-zone" onclick="document.getElementById('csv-input').click()">
@@ -303,7 +309,40 @@
         opt.textContent = u.full_name;
         sel.appendChild(opt);
       });
+      sel.onchange = actualizarCiudadesSugeridas;
     } catch (e) { console.error(e); }
+  }
+
+  // Sugerir ciudades ya usadas por el visitador seleccionado, para evitar variantes nuevas
+  function actualizarCiudadesSugeridas() {
+    const visitadorId = document.getElementById('sel-visitador').value;
+    const datalist = document.getElementById('ciudades-datalist');
+    datalist.innerHTML = '';
+    if (!visitadorId) return;
+    const ciudadesDelVisitador = [...new Set(
+      listasCache.filter(l => l.visitador_id === visitadorId).map(l => l.ciudad)
+    )];
+    ciudadesDelVisitador.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      datalist.appendChild(opt);
+    });
+  }
+
+  async function limpiarDuplicados() {
+    if (!confirm('Esto buscará y fusionará listas duplicadas (mismo visitador, ciudad y mes) en toda la base de datos.\n\n¿Continuar?')) return;
+    try {
+      const res = await fetch(`${API}/api/listas/admin/limpiar-duplicados`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al limpiar');
+      alert('✅ ' + data.mensaje);
+      cargarListas();
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
   }
 
   let listasCache = [];
