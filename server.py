@@ -425,6 +425,71 @@ async def update_user(
     updated_user = await db.users.find_one({"id": user_id})
     return User(**{k: v for k, v in updated_user.items() if k != 'hashed_password'})
 
+
+@users_router.post("/{user_id}/renombrar")
+async def renombrar_visitador(
+    user_id: str,
+    nuevo_nombre: str,
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Cambia el nombre completo del visitador, auto-genera el @usuario (inicial+apellido),
+    y propaga el cambio en visitas y listas de médicos.
+    """
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    nombre_limpio = " ".join(nuevo_nombre.strip().split())
+    partes = nombre_limpio.split()
+    if len(partes) < 2:
+        raise HTTPException(status_code=400, detail="Ingresa nombre Y apellido (ej: Genesis Fuentes)")
+
+    # Generar username: inicial del primer nombre + primer apellido, todo minúsculas sin tildes
+    import unicodedata
+    def quitar_tildes(s):
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+    inicial = quitar_tildes(partes[0][0]).lower()
+    apellido = quitar_tildes(partes[1]).lower()
+    base_username = inicial + apellido  # ej: gfuentes
+
+    # Verificar unicidad — agregar número si ya existe
+    username_final = base_username
+    contador = 2
+    while True:
+        existing = await db.users.find_one({"username": username_final})
+        if not existing or existing["id"] == user_id:
+            break
+        username_final = f"{base_username}{contador}"
+        contador += 1
+
+    # Actualizar usuario
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"full_name": nombre_limpio, "username": username_final}}
+    )
+
+    # Propagar en visitas — actualizar visitador_name
+    await db.visits.update_many(
+        {"visitador_id": user_id},
+        {"$set": {"visitador_name": nombre_limpio}}
+    )
+
+    # Propagar en listas de médicos — actualizar visitador_name
+    await db.listas_medicos.update_many(
+        {"visitador_id": user_id},
+        {"$set": {"visitador_name": nombre_limpio}}
+    )
+
+    return {
+        "mensaje": f"Nombre actualizado correctamente",
+        "nombre": nombre_limpio,
+        "username": username_final,
+        "visitas_actualizadas": True,
+        "listas_actualizadas": True,
+    }
+
 @users_router.delete("/{user_id}")
 async def delete_user(user_id: str, current_user: User = Depends(get_current_admin)):
     """Eliminar usuario (solo admin)"""
