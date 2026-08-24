@@ -841,6 +841,56 @@ async def admin_subir_lista(
 
     return {"mensaje": f"Lista actualizada — {visitador.get('full_name')} — {lista_data.ciudad} — {len(medicos_con_id)} médicos"}
 
+@listas_router.get("/{lista_id}", response_model=ListaMedicos)
+async def get_lista_detalle(
+    lista_id: str,
+    current_user: User = Depends(get_current_admin)
+):
+    """Obtiene el detalle completo de una lista (para editar)."""
+    lista = await db.listas_medicos.find_one({"id": lista_id})
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    return ListaMedicos(**lista)
+
+@listas_router.put("/{lista_id}")
+async def actualizar_lista(
+    lista_id: str,
+    medicos: List[MedicoLista],
+    current_user: User = Depends(get_current_admin)
+):
+    """Reemplaza la lista completa de médicos de una lista existente (edición manual)."""
+    lista = await db.listas_medicos.find_one({"id": lista_id})
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+
+    medicos_con_id = []
+    for m in medicos:
+        medico_dict = m.dict()
+        if not medico_dict.get("id"):
+            medico_dict["id"] = str(uuid.uuid4())
+        medicos_con_id.append(medico_dict)
+
+    await db.listas_medicos.update_one(
+        {"id": lista_id},
+        {"$set": {
+            "medicos": medicos_con_id,
+            "total": len(medicos_con_id),
+            "updated_at": datetime.utcnow(),
+        }}
+    )
+    return {"mensaje": f"Lista actualizada — {len(medicos_con_id)} médicos"}
+
+@listas_router.delete("/{lista_id}")
+async def eliminar_lista(
+    lista_id: str,
+    current_user: User = Depends(get_current_admin)
+):
+    """Elimina una lista completa de médicos."""
+    result = await db.listas_medicos.delete_one({"id": lista_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    return {"mensaje": "Lista eliminada correctamente"}
+
 
 # =================
 # Rutas de Reportes Mensuales
