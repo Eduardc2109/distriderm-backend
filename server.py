@@ -159,6 +159,7 @@ class MedicoLista(BaseModel):
     nombre: str
     especialidad: str
     direccion: Optional[str] = None
+    telefono: Optional[str] = None
     id: Optional[str] = None
 
 class ListaMedicos(BaseModel):
