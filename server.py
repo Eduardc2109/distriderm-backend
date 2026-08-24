@@ -355,6 +355,7 @@ class PasswordChange(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
+    username: Optional[str] = None
     is_active: Optional[bool] = None
 
 @users_router.get("/", response_model=List[User])
@@ -409,11 +410,18 @@ async def update_user(
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
+
     update_data = {k: v for k, v in user_data.dict().items() if v is not None}
+
+    # Validar que el nuevo username no esté ya tomado
+    if "username" in update_data and update_data["username"] != user["username"]:
+        existing = await db.users.find_one({"username": update_data["username"]})
+        if existing:
+            raise HTTPException(status_code=400, detail=f"El usuario '{update_data['username']}' ya existe")
+
     if update_data:
         await db.users.update_one({"id": user_id}, {"$set": update_data})
-    
+
     updated_user = await db.users.find_one({"id": user_id})
     return User(**{k: v for k, v in updated_user.items() if k != 'hashed_password'})
 
@@ -876,7 +884,66 @@ async def admin_subir_lista(
 
     return {"mensaje": msg}
 
-@listas_router.get("/{lista_id}", response_model=ListaMedicos)
+@listas_router.post("/admin/clonar")
+async def clonar_lista(
+    lista_id: str,
+    visitador_destino_id: str,
+    current_user: User = Depends(get_current_admin)
+):
+    """Clona la lista de un visitador a otro (útil cuando comparten ciudad)."""
+    # Obtener lista origen
+    lista = await db.listas_medicos.find_one({"id": lista_id})
+    if not lista:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+
+    # Obtener visitador destino
+    visitador = await db.users.find_one({"id": visitador_destino_id})
+    if not visitador:
+        raise HTTPException(status_code=404, detail="Visitador destino no encontrado")
+
+    ciudad_norm = normalizar_ciudad(lista["ciudad"])
+
+    # Verificar si ya existe una lista para ese visitador y ciudad
+    existing = await db.listas_medicos.find_one({
+        "visitador_id": visitador_destino_id,
+        "ciudad": ciudad_norm,
+        "mes": lista["mes"],
+        "anio": lista["anio"],
+    })
+
+    # Asignar IDs nuevos a cada médico para la copia
+    medicos_copia = []
+    for m in lista.get("medicos", []):
+        medico = dict(m)
+        medico["id"] = str(uuid.uuid4())
+        medicos_copia.append(medico)
+
+    nueva_lista = ListaMedicos(
+        id=existing["id"] if existing else str(uuid.uuid4()),
+        visitador_id=visitador_destino_id,
+        visitador_name=visitador.get("full_name", ""),
+        ciudad=ciudad_norm,
+        mes=lista["mes"],
+        anio=lista["anio"],
+        medicos=[MedicoLista(**m) for m in medicos_copia],
+        total=len(medicos_copia),
+        created_at=existing["created_at"] if existing else datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    if existing:
+        await db.listas_medicos.update_one(
+            {"id": existing["id"]}, {"$set": nueva_lista.dict()}
+        )
+    else:
+        await db.listas_medicos.insert_one(nueva_lista.dict())
+
+    return {
+        "mensaje": f"Lista clonada a {visitador.get('full_name')} — {ciudad_norm} — {len(medicos_copia)} médicos",
+        "lista_id": nueva_lista.id,
+    }
+
+
 async def get_lista_detalle(
     lista_id: str,
     current_user: User = Depends(get_current_admin)
