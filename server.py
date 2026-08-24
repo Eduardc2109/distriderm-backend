@@ -1029,6 +1029,13 @@ async def dashboard():
         return HTMLResponse("<h1>Dashboard no encontrado</h1><p>Sube el archivo static/dashboard.html</p>", status_code=404)
     return FileResponse(str(dashboard_path))
 
+@app.get("/listas", response_class=HTMLResponse)
+async def listas_page():
+    listas_path = STATIC_DIR / "listas.html"
+    if not listas_path.exists():
+        return HTMLResponse("<h1>Página no encontrada</h1><p>Sube el archivo static/listas.html</p>", status_code=404)
+    return FileResponse(str(listas_path))
+
 # Middleware CORS
 app.add_middleware(
     CORSMiddleware,
