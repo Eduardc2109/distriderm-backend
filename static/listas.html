@@ -202,6 +202,32 @@
       </div>
 
     </div>
+
+    <!-- Sección clonar -->
+    <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07);margin-top:20px">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:18px">🔁 Clonar lista a otro visitador</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:16px">
+        Útil cuando dos visitadores trabajan en la misma ciudad — cada uno tiene su propio progreso pero parten de la misma lista.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:8px">Lista origen</label>
+          <select id="clonar-lista-origen" style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px">
+            <option value="">— Selecciona una lista —</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:8px">Visitador destino</label>
+          <select id="clonar-visitador-destino" style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px">
+            <option value="">— Selecciona visitador —</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="ejecutarClonar()" style="background:#007AFF;color:#fff;border:none;border-radius:12px;padding:13px 24px;font-size:15px;font-weight:700;cursor:pointer">
+        🔁 Clonar Lista
+      </button>
+      <div id="clonar-result" style="display:none;margin-top:12px;padding:12px;border-radius:10px;font-size:14px"></div>
+    </div>
   </div>
 
   <!-- Modal de edición -->
@@ -585,6 +611,61 @@
   document.getElementById('modal-edit').addEventListener('click', (e) => {
     if (e.target.id === 'modal-edit') cerrarModal();
   });
+
+  // ── Clonar lista ───────────────────────────────────────────────────────────
+  async function ejecutarClonar() {
+    const listaId = document.getElementById('clonar-lista-origen').value;
+    const visitadorId = document.getElementById('clonar-visitador-destino').value;
+    const result = document.getElementById('clonar-result');
+    result.style.display = 'none';
+    result.className = 'result';
+
+    if (!listaId) { alert('Selecciona una lista origen'); return; }
+    if (!visitadorId) { alert('Selecciona un visitador destino'); return; }
+
+    try {
+      const res = await fetch(
+        `${API}/api/listas/admin/clonar?lista_id=${listaId}&visitador_destino_id=${visitadorId}`,
+        { method: 'POST', headers: authHeaders() }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al clonar');
+      result.style.display = 'block';
+      result.style.background = '#e6f4ea';
+      result.style.color = '#1e7e34';
+      result.textContent = '✅ ' + data.mensaje;
+      cargarListas(); // refrescar la lista de listas
+    } catch (e) {
+      result.style.display = 'block';
+      result.style.background = '#fdecea';
+      result.style.color = '#c0392b';
+      result.textContent = '❌ ' + e.message;
+    }
+  }
+
+  // Poblar selectores de clonar cuando carguen los visitadores y listas
+  const _cargarListasOriginal = cargarListas;
+  cargarListas = async function() {
+    await _cargarListasOriginal();
+    // Poblar selector de listas origen
+    const selLista = document.getElementById('clonar-lista-origen');
+    if (selLista) {
+      selLista.innerHTML = '<option value="">— Selecciona una lista —</option>';
+      listasCache.forEach(l => {
+        selLista.innerHTML += `<option value="${l.id}">${l.visitador_name} — ${l.ciudad} (${l.total} médicos)</option>`;
+      });
+    }
+    // Poblar selector de visitadores destino
+    const selVis = document.getElementById('clonar-visitador-destino');
+    if (selVis) {
+      const res = await fetch(`${API}/api/users/`, { headers: authHeaders() });
+      const users = await res.json();
+      selVis.innerHTML = '<option value="">— Selecciona visitador —</option>';
+      users.filter(u => u.role === 'visitador').forEach(u => {
+        selVis.innerHTML += `<option value="${u.id}">${u.full_name} (@${u.username})</option>`;
+      });
+    }
+  };
 </script>
 </body>
 </html>
