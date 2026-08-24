@@ -172,8 +172,10 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('reporte', this)">📊 Reporte Mensual</button>
-      <button class="tab-btn" onclick="switchTab('listas', this)">📋 Gestión de Listas</button>
+      <button class="tab-btn active">📊 Reporte Mensual</button>
+      <a href="/listas" style="flex:1;text-decoration:none">
+        <button class="tab-btn" style="width:100%">📋 Gestión de Listas</button>
+      </a>
     </div>
 
     <!-- Tab Reporte -->
@@ -251,35 +253,7 @@
     </div><!-- /tab-reporte -->
 
     <!-- Tab Listas -->
-    <div id="tab-listas" style="display:none">
-      <div class="listas-grid">
-        <div class="lista-card">
-          <h3>⬆️ Subir lista de médicos</h3>
-          <div class="form-group">
-            <label>Visitador</label>
-            <select id="lista-visitador"><option value="">— Selecciona visitador —</option></select>
-          </div>
-          <div class="form-group">
-            <label>Ciudad</label>
-            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." />
-          </div>
-          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
-            <div style="font-size:32px;margin-bottom:8px">📄</div>
-            <div id="drop-zone-text">Haz clic para seleccionar el CSV</div>
-            <div style="font-size:12px;color:#888;margin-top:4px">Columnas: Nombre, Especialidad, Dirección</div>
-          </div>
-          <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="archivoSeleccionado(this)" />
-          <button class="btn-upload" id="btn-subir" onclick="subirLista()" disabled>Subir Lista</button>
-          <div class="upload-result" id="upload-result"></div>
-        </div>
-        <div class="lista-card">
-          <h3>📂 Listas en el servidor</h3>
-          <div class="listas-existentes" id="listas-existentes">
-            <p style="color:#888;text-align:center;padding:20px">Selecciona la pestaña para cargar</p>
-          </div>
-        </div>
-      </div>
-    </div><!-- /tab-listas -->
+    
 
   </div>
   <footer>Distriderm &copy; 2025 &mdash; Dashboard de Supervisión</footer>
@@ -522,123 +496,6 @@
     filtrarTabla();
   }
 
-  // ── Tabs ───────────────────────────────────────────────────────────────────
-  function switchTab(tab, btn) {
-    document.getElementById('tab-reporte').style.display = (tab === 'reporte') ? 'block' : 'none';
-    document.getElementById('tab-listas').style.display = (tab === 'listas') ? 'block' : 'none';
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    if (tab === 'listas') cargarListasPanel();
-  }
-
-  // ── Gestión de listas ──────────────────────────────────────────────────────
-  let csvData = null;
-
-  async function cargarListasPanel() {
-    try {
-      const res = await fetch(`${API}/api/users/`, { headers: authHeaders() });
-      const users = await res.json();
-      const sel = document.getElementById('lista-visitador');
-      sel.innerHTML = '<option value="">— Selecciona visitador —</option>';
-      users.filter(u => u.role === 'visitador').forEach(u => {
-        sel.innerHTML += `<option value="${u.id}">${u.full_name}</option>`;
-      });
-    } catch(e) { console.error(e); }
-
-    try {
-      const res = await fetch(`${API}/api/listas/`, { headers: authHeaders() });
-      const listas = await res.json();
-      const cont = document.getElementById('listas-existentes');
-      if (!listas.length) {
-        cont.innerHTML = '<p style="color:#888;text-align:center;padding:20px">Sin listas cargadas</p>';
-        return;
-      }
-      cont.innerHTML = listas.map(l => `
-        <div class="lista-item">
-          <div>
-            <div class="lista-item-info">${l.visitador_name}</div>
-            <div class="lista-item-sub">📍 ${l.ciudad} · Actualizado: ${new Date(l.updated_at).toLocaleDateString('es')}</div>
-          </div>
-          <span class="lista-item-badge">${l.total} médicos</span>
-        </div>
-      `).join('');
-    } catch(e) {
-      document.getElementById('listas-existentes').innerHTML = '<p style="color:red">Error cargando listas</p>';
-    }
-  }
-
-  function archivoSeleccionado(input) {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      const sep = lines[0].includes('\t') ? '\t' : ',';
-      const clean = s => s.replace(/^["']|["']$/g, '').trim();
-      csvData = [];
-      for (let i = 0; i < lines.length; i++) {
-        const vals = lines[i].split(sep).map(clean);
-        const nombre = vals[0];
-        if (nombre && nombre.length > 1) {
-          csvData.push({ nombre, especialidad: vals[1] || 'No especificada', direccion: vals[2] || null });
-        }
-      }
-      document.getElementById('drop-zone').classList.add('has-file');
-      document.getElementById('drop-zone-text').textContent = `✅ ${file.name} — ${csvData.length} médicos`;
-      document.getElementById('btn-subir').disabled = false;
-    };
-    reader.readAsText(file, 'UTF-8');
-  }
-
-  async function subirLista() {
-    const visitadorId = document.getElementById('lista-visitador').value;
-    const ciudad = document.getElementById('lista-ciudad').value.trim();
-    const result = document.getElementById('upload-result');
-    if (!visitadorId) { alert('Selecciona un visitador'); return; }
-    if (!ciudad) { alert('Ingresa la ciudad'); return; }
-    if (!csvData || csvData.length === 0) { alert('Selecciona un CSV válido'); return; }
-
-    document.getElementById('btn-subir').disabled = true;
-    document.getElementById('btn-subir').textContent = 'Subiendo...';
-    result.style.display = 'none';
-
-    try {
-      const ahora = new Date();
-      const res = await fetch(`${API}/api/listas/admin/subir?visitador_id=${visitadorId}`, {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ciudad,
-          mes: ahora.getMonth() + 1,
-          anio: ahora.getFullYear(),
-          medicos: csvData,
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        result.className = 'upload-result ok';
-        result.textContent = '✅ ' + data.mensaje;
-        result.style.display = 'block';
-        csvData = null;
-        document.getElementById('csv-input').value = '';
-        document.getElementById('drop-zone').classList.remove('has-file');
-        document.getElementById('drop-zone-text').textContent = 'Haz clic para seleccionar el CSV';
-        document.getElementById('lista-ciudad').value = '';
-        document.getElementById('lista-visitador').value = '';
-        cargarListasPanel();
-      } else {
-        throw new Error(data.detail || 'Error desconocido');
-      }
-    } catch(e) {
-      result.className = 'upload-result err';
-      result.textContent = '❌ Error: ' + e.message;
-      result.style.display = 'block';
-    } finally {
-      document.getElementById('btn-subir').disabled = false;
-      document.getElementById('btn-subir').textContent = 'Subir Lista';
-    }
-  }
 </script>
 </body>
 </html>

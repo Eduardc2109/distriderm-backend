@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gestión de Listas — Distriderm</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #F0F4FF;
+    color: #1C1C1E;
+    min-height: 100vh;
+  }
+  .topbar {
+    background: #fff; padding: 16px 24px; display: flex; align-items: center;
+    justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .topbar h1 { font-size: 18px; font-weight: 700; }
+  .topbar a { color: #007AFF; text-decoration: none; font-weight: 600; font-size: 14px; }
+
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px; }
+
+  #login-box {
+    max-width: 380px; margin: 80px auto; background: #fff; border-radius: 16px;
+    padding: 32px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  }
+  #login-box h2 { font-size: 20px; margin-bottom: 20px; text-align: center; }
+  #login-box input {
+    width: 100%; padding: 12px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px;
+    font-size: 15px; margin-bottom: 12px; outline: none;
+  }
+  #login-box button {
+    width: 100%; background: #007AFF; color: #fff; border: none; border-radius: 12px;
+    padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px;
+  }
+  #login-error { color: #EA4335; font-size: 13px; margin-top: 10px; display: none; text-align: center; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block; font-size: 12px; font-weight: 700; color: #888;
+    text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.3px;
+  }
+  .field select, .field input {
+    width: 100%; padding: 11px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px;
+    font-size: 14px; outline: none; background: #fafafa;
+  }
+  .field select:focus, .field input:focus { border-color: #007AFF; background: #fff; }
+
+  .drop {
+    border: 2px dashed #007AFF; border-radius: 12px; padding: 32px;
+    text-align: center; cursor: pointer; color: #007AFF; font-weight: 600;
+    background: #f0f7ff; margin-bottom: 16px; transition: background 0.15s;
+  }
+  .drop:hover { background: #e2f0ff; }
+  .drop.filled { background: #e6f4ea; border-color: #34A853; color: #1e7e34; }
+  .drop .sub { font-size: 12px; color: #888; margin-top: 6px; font-weight: 400; }
+
+  .btn-primary {
+    width: 100%; background: #34A853; color: #fff; border: none; border-radius: 12px;
+    padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .btn-primary:disabled { background: #b0b0b0; cursor: not-allowed; }
+
+  .result {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; display: none;
+  }
+  .result.ok { background: #e6f4ea; color: #1e7e34; display: block; }
+  .result.err { background: #fdecea; color: #c0392b; display: block; }
+
+  .lista-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 13px 14px; border-radius: 10px; background: #f7f8fa; margin-bottom: 8px;
+  }
+  .lista-item .nombre { font-size: 14px; font-weight: 700; }
+  .lista-item .sub { font-size: 12px; color: #888; margin-top: 3px; }
+  .lista-item .badge {
+    background: #007AFF1a; color: #007AFF; font-size: 12px; font-weight: 700;
+    padding: 5px 11px; border-radius: 10px; white-space: nowrap;
+  }
+  .empty { color: #999; text-align: center; padding: 24px 10px; font-size: 14px; }
+  .spinner { text-align: center; padding: 24px; color: #888; }
+</style>
+</head>
+<body>
+
+<div id="login-box">
+  <h2>🔐 Iniciar sesión</h2>
+  <input type="text" id="login-user" placeholder="Usuario" autocomplete="username" />
+  <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" />
+  <button onclick="login()">Ingresar</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="topbar">
+    <h1>📋 Gestión de Listas de Médicos</h1>
+    <a href="/dashboard">← Volver al Dashboard</a>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+
+      <div class="card">
+        <h3>⬆️ Subir lista de médicos</h3>
+
+        <div class="field">
+          <label>Visitador</label>
+          <select id="sel-visitador">
+            <option value="">— Selecciona visitador —</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Ciudad</label>
+          <input type="text" id="inp-ciudad" placeholder="Ej: Quito, Guayaquil..." />
+        </div>
+
+        <div class="drop" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+          <div style="font-size:30px;margin-bottom:6px">📄</div>
+          <div id="drop-text">Haz clic para seleccionar el CSV</div>
+          <div class="sub">Columnas: Nombre, Especialidad, Dirección (opcional) — sin encabezados</div>
+        </div>
+        <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="onFile(this)" />
+
+        <button class="btn-primary" id="btn-subir" onclick="subir()" disabled>Subir Lista</button>
+        <div class="result" id="result"></div>
+      </div>
+
+      <div class="card">
+        <h3>📂 Listas guardadas en el servidor</h3>
+        <div id="listas-container">
+          <div class="spinner">Cargando…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = '';
+  let token = localStorage.getItem('dash_token') || '';
+  let csvData = null;
+
+  function authHeaders() { return { 'Authorization': `Bearer ${token}` }; }
+
+  window.onload = () => {
+    if (token) verificarSesion();
+  };
+
+  async function verificarSesion() {
+    try {
+      const res = await fetch(`${API}/api/auth/me`, { headers: authHeaders() });
+      if (!res.ok) throw new Error();
+      const user = await res.json();
+      if (user.role !== 'admin') {
+        alert('Solo administradores pueden acceder a esta página');
+        return;
+      }
+      mostrarApp();
+    } catch (e) {
+      localStorage.removeItem('dash_token');
+      token = '';
+    }
+  }
+
+  async function login() {
+    const usuario = document.getElementById('login-user').value.trim();
+    const pass = document.getElementById('login-pass').value;
+    const errBox = document.getElementById('login-error');
+    errBox.style.display = 'none';
+
+    if (!usuario || !pass) {
+      errBox.textContent = 'Ingresa usuario y contraseña';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      const form = new URLSearchParams();
+      form.append('username', usuario);
+      form.append('password', pass);
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Credenciales incorrectas');
+
+      token = data.access_token;
+      localStorage.setItem('dash_token', token);
+
+      const meRes = await fetch(`${API}/api/auth/me`, { headers: authHeaders() });
+      const me = await meRes.json();
+      if (me.role !== 'admin') {
+        errBox.textContent = 'Solo administradores pueden acceder';
+        errBox.style.display = 'block';
+        localStorage.removeItem('dash_token');
+        return;
+      }
+
+      mostrarApp();
+    } catch (e) {
+      errBox.textContent = e.message || 'Error al iniciar sesión';
+      errBox.style.display = 'block';
+    }
+  }
+
+  function mostrarApp() {
+    document.getElementById('login-box').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    cargarVisitadores();
+    cargarListas();
+  }
+
+  async function cargarVisitadores() {
+    try {
+      const res = await fetch(`${API}/api/users/`, { headers: authHeaders() });
+      const users = await res.json();
+      const sel = document.getElementById('sel-visitador');
+      sel.innerHTML = '<option value="">— Selecciona visitador —</option>';
+      users.filter(u => u.role === 'visitador').forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.full_name;
+        sel.appendChild(opt);
+      });
+    } catch (e) { console.error(e); }
+  }
+
+  async function cargarListas() {
+    const cont = document.getElementById('listas-container');
+    try {
+      const res = await fetch(`${API}/api/listas/`, { headers: authHeaders() });
+      const listas = await res.json();
+      if (!listas.length) {
+        cont.innerHTML = '<div class="empty">Aún no hay listas cargadas</div>';
+        return;
+      }
+      cont.innerHTML = '';
+      listas.forEach(l => {
+        const item = document.createElement('div');
+        item.className = 'lista-item';
+        const fecha = l.updated_at ? new Date(l.updated_at).toLocaleDateString('es-EC') : '';
+        item.innerHTML = `
+          <div>
+            <div class="nombre">${l.visitador_name}</div>
+            <div class="sub">📍 ${l.ciudad} · Actualizado ${fecha}</div>
+          </div>
+          <span class="badge">${l.total} médicos</span>
+        `;
+        cont.appendChild(item);
+      });
+    } catch (e) {
+      cont.innerHTML = '<div class="empty" style="color:#c0392b">Error cargando listas</div>';
+    }
+  }
+
+  function onFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length === 0) { alert('El archivo está vacío'); return; }
+      const sep = lines[0].includes('\t') ? '\t' : ',';
+      const clean = s => s.replace(/^['"]|['"]$/g, '').trim();
+
+      csvData = [];
+      for (let i = 0; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(clean);
+        const nombre = vals[0];
+        if (nombre && nombre.length > 1) {
+          csvData.push({
+            nombre,
+            especialidad: vals[1] || 'No especificada',
+            direccion: vals[2] || null,
+          });
+        }
+      }
+
+      if (csvData.length === 0) {
+        alert('No se detectaron médicos válidos en el archivo');
+        return;
+      }
+
+      document.getElementById('drop-zone').classList.add('filled');
+      document.getElementById('drop-text').textContent = `✅ ${file.name} — ${csvData.length} médicos detectados`;
+      document.getElementById('btn-subir').disabled = false;
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  async function subir() {
+    const visitadorId = document.getElementById('sel-visitador').value;
+    const ciudad = document.getElementById('inp-ciudad').value.trim();
+    const result = document.getElementById('result');
+    result.style.display = 'none';
+    result.className = 'result';
+
+    if (!visitadorId) { alert('Selecciona un visitador'); return; }
+    if (!ciudad) { alert('Ingresa la ciudad'); return; }
+    if (!csvData || csvData.length === 0) { alert('Selecciona un archivo CSV válido'); return; }
+
+    const btn = document.getElementById('btn-subir');
+    btn.disabled = true;
+    btn.textContent = 'Subiendo...';
+
+    try {
+      const ahora = new Date();
+      const res = await fetch(`${API}/api/listas/admin/subir?visitador_id=${visitadorId}`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ciudad,
+          mes: ahora.getMonth() + 1,
+          anio: ahora.getFullYear(),
+          medicos: csvData,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al subir la lista');
+
+      result.className = 'result ok';
+      result.textContent = '✅ ' + (data.mensaje || 'Lista subida correctamente');
+      result.style.display = 'block';
+
+      // Reset form
+      csvData = null;
+      document.getElementById('csv-input').value = '';
+      document.getElementById('drop-zone').classList.remove('filled');
+      document.getElementById('drop-text').textContent = 'Haz clic para seleccionar el CSV';
+      document.getElementById('inp-ciudad').value = '';
+      document.getElementById('sel-visitador').value = '';
+      btn.disabled = true;
+
+      cargarListas();
+    } catch (e) {
+      result.className = 'result err';
+      result.textContent = '❌ ' + e.message;
+      result.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Subir Lista';
+    }
+  }
+
+  // Enter para login
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && document.getElementById('login-box').style.display !== 'none') {
+      login();
+    }
+  });
+</script>
+</body>
+</html>
