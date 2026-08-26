@@ -161,6 +161,16 @@ class MedicoLista(BaseModel):
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     id: Optional[str] = None
+    ubicacion_lat: Optional[float] = None
+    ubicacion_lng: Optional[float] = None
+    ubicacion_direccion: Optional[str] = None
+    ubicacion_timestamp: Optional[int] = None  # Unix ms
+
+class DoctorUbicacionUpdate(BaseModel):
+    doctor_nombre: str
+    ubicacion_lat: float
+    ubicacion_lng: float
+    ubicacion_direccion: Optional[str] = None
 
 class ListaMedicos(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1127,6 +1137,67 @@ async def limpiar_duplicados(
         "fusionadas": fusionadas,
         "normalizadas": normalizadas,
         "eliminadas": len(eliminadas_ids),
+    }
+
+
+@listas_router.patch("/doctor/ubicacion")
+async def actualizar_ubicacion_doctor(
+    data: DoctorUbicacionUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Actualiza la ubicación GPS de un médico en todas las listas del visitador actual.
+    Busca por nombre normalizado e inyecta lat/lng/dirección/timestamp en cada coincidencia.
+    """
+    import time
+    nombre_norm = normalizar_nombre_medico(data.doctor_nombre)
+    ahora_ms = int(time.time() * 1000)
+
+    # Buscar todas las listas del visitador actual
+    listas = await db.listas_medicos.find(
+        {"visitador_id": current_user.id}
+    ).to_list(500)
+
+    actualizadas = 0
+    for lista in listas:
+        medicos = lista.get("medicos", [])
+        cambio = False
+        nuevos_medicos = []
+        for m in medicos:
+            nombre_m = normalizar_nombre_medico(m.get("nombre", ""))
+            if nombre_m.lower() == nombre_norm.lower():
+                # Solo actualizar si no tiene timestamp o el nuevo es más reciente
+                ts_actual = m.get("ubicacion_timestamp", 0) or 0
+                if ahora_ms >= ts_actual:
+                    m = {
+                        **m,
+                        "ubicacion_lat": data.ubicacion_lat,
+                        "ubicacion_lng": data.ubicacion_lng,
+                        "ubicacion_direccion": data.ubicacion_direccion,
+                        "ubicacion_timestamp": ahora_ms,
+                    }
+                    cambio = True
+            nuevos_medicos.append(m)
+
+        if cambio:
+            await db.listas_medicos.update_one(
+                {"id": lista["id"]},
+                {"$set": {"medicos": nuevos_medicos, "updated_at": datetime.utcnow()}}
+            )
+            actualizadas += 1
+
+    if actualizadas == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se encontró el médico '{data.doctor_nombre}' en tus listas"
+        )
+
+    return {
+        "ok": True,
+        "doctor": data.doctor_nombre,
+        "listas_actualizadas": actualizadas,
+        "ubicacion_lat": data.ubicacion_lat,
+        "ubicacion_lng": data.ubicacion_lng,
     }
 
 
