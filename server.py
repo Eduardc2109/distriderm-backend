@@ -1362,6 +1362,77 @@ async def get_visitadores_lista(current_user: User = Depends(get_current_admin))
 
 
 # =================
+# Admin: gestión de datos
+# =================
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
+
+class ArchivePeriodoRequest(BaseModel):
+    periodo: str  # ej: "2025-Q1"
+
+@admin_router.post("/archivar-periodo")
+async def archivar_periodo(data: ArchivePeriodoRequest, current_user: User = Depends(get_current_admin)):
+    """Mueve todas las visitas a visitas_archivadas con etiqueta de periodo, luego las elimina."""
+    import time
+    visitas = await db.visits.find({}).to_list(100000)
+    if not visitas:
+        return {"ok": True, "archivadas": 0, "periodo": data.periodo}
+    for v in visitas:
+        v["periodo"] = data.periodo
+        v["archivado_en"] = datetime.utcnow()
+    await db.visitas_archivadas.insert_many(visitas)
+    result = await db.visits.delete_many({})
+    return {"ok": True, "archivadas": result.deleted_count, "periodo": data.periodo}
+
+@admin_router.delete("/visitas/visitador/{visitador_id}")
+async def borrar_visitas_visitador(visitador_id: str, current_user: User = Depends(get_current_admin)):
+    """Elimina todas las visitas de un visitador específico."""
+    result = await db.visits.delete_many({"visitador_id": visitador_id})
+    return {"ok": True, "eliminadas": result.deleted_count, "visitador_id": visitador_id}
+
+@admin_router.delete("/visitas/antes-de/{fecha}")
+async def borrar_visitas_antes_de(fecha: str, current_user: User = Depends(get_current_admin)):
+    """Elimina visitas anteriores a la fecha dada (formato YYYY-MM-DD)."""
+    try:
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
+    result = await db.visits.delete_many({"fecha": {"$lt": fecha_dt}})
+    return {"ok": True, "eliminadas": result.deleted_count, "antes_de": fecha}
+
+@admin_router.get("/visitas/contar/visitador/{visitador_id}")
+async def contar_visitas_visitador(visitador_id: str, current_user: User = Depends(get_current_admin)):
+    count = await db.visits.count_documents({"visitador_id": visitador_id})
+    return {"visitador_id": visitador_id, "total": count}
+
+@admin_router.get("/visitas/contar/antes-de/{fecha}")
+async def contar_visitas_antes_de(fecha: str, current_user: User = Depends(get_current_admin)):
+    try:
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
+    count = await db.visits.count_documents({"fecha": {"$lt": fecha_dt}})
+    return {"antes_de": fecha, "total": count}
+
+@admin_router.delete("/visitas/todas")
+async def borrar_todas_las_visitas(current_user: User = Depends(get_current_admin)):
+    """Borra absolutamente todas las visitas. Solo para limpiar datos de prueba."""
+    count = await db.visits.count_documents({})
+    result = await db.visits.delete_many({})
+    return {"ok": True, "eliminadas": result.deleted_count, "total_previo": count}
+
+@admin_router.get("/stats/db-size")
+async def db_size(current_user: User = Depends(get_current_admin)):
+    total_visits = await db.visits.count_documents({})
+    total_archivadas = await db.visitas_archivadas.count_documents({})
+    total_users = await db.users.count_documents({})
+    return {
+        "visits": total_visits,
+        "visitas_archivadas": total_archivadas,
+        "users": total_users,
+        "total": total_visits + total_archivadas + total_users,
+    }
+
+# =================
 # Incluir routers
 # =================
 api_router.include_router(auth_router)
@@ -1371,6 +1442,7 @@ api_router.include_router(stats_router)
 api_router.include_router(users_router)
 api_router.include_router(listas_router)
 api_router.include_router(reportes_router)
+api_router.include_router(admin_router)
 
 app.include_router(api_router)
 
