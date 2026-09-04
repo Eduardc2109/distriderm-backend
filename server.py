@@ -1461,6 +1461,124 @@ async def borrar_todas_las_visitas(current_user: User = Depends(get_current_admi
     result = await db.visits.delete_many({})
     return {"ok": True, "eliminadas": result.deleted_count, "total_previo": count}
 
+# ── Deteccion y limpieza de visitas duplicadas ──────────────────────────
+# Misma logica que el script limpiar_duplicados.py
+
+def _clave_duplicado(v):
+    """Huella de una visita. Dos registros con la misma huella son el mismo
+    evento guardado dos veces (reintento, timeout o doble toque)."""
+    cuid = v.get('client_uid')
+    if cuid:
+        return f"uid:{cuid}"
+
+    def t(x):
+        return str(x or '').strip().lower()
+
+    h = v.get('hora_inicio')
+    hs = h.replace(microsecond=0).isoformat() if isinstance(h, datetime) else t(h)[:19]
+
+    return "|".join([
+        'campos',
+        t(v.get('visitador_id')),
+        t(v.get('medico_nombre')),
+        hs,
+        t(v.get('estado_visita')),
+        t(v.get('observaciones')),
+    ])
+
+
+def _antiguedad(v):
+    """Para elegir cual se conserva: la creada primero (la original)."""
+    c = v.get('created_at')
+    if isinstance(c, datetime):
+        return c
+    if isinstance(c, str):
+        try:
+            return datetime.fromisoformat(c.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    return datetime.max
+
+
+async def _detectar_duplicados():
+    """Devuelve [(conservada, [descartadas...]), ...] solo de grupos repetidos."""
+    visitas = await db.visits.find({}).to_list(100000)
+    grupos = {}
+    for v in visitas:
+        grupos.setdefault(_clave_duplicado(v), []).append(v)
+
+    duplicados = []
+    for grupo in grupos.values():
+        if len(grupo) > 1:
+            ordenado = sorted(grupo, key=_antiguedad)
+            duplicados.append((ordenado[0], ordenado[1:]))
+    return duplicados
+
+
+@admin_router.get("/duplicados")
+async def listar_duplicados(current_user: User = Depends(get_current_admin)):
+    """Modo REVISION: solo informa, no borra nada."""
+    duplicados = await _detectar_duplicados()
+
+    detalle = []
+    for conservada, descartadas in duplicados:
+        detalle.append({
+            "medico_nombre": conservada.get("medico_nombre"),
+            "visitador_name": conservada.get("visitador_name"),
+            "fecha": conservada.get("fecha"),
+            "hora_inicio": conservada.get("hora_inicio"),
+            "estado_visita": conservada.get("estado_visita"),
+            "veces": len(descartadas) + 1,
+            "conservar_id": conservada.get("id"),
+            "eliminar_ids": [d.get("id") for d in descartadas],
+        })
+
+    detalle.sort(key=lambda g: g["veces"], reverse=True)
+
+    return {
+        "grupos": len(detalle),
+        "registros_sobrantes": sum(len(g["eliminar_ids"]) for g in detalle),
+        "detalle": detalle,
+    }
+
+
+@admin_router.post("/duplicados/limpiar")
+async def limpiar_duplicados_endpoint(current_user: User = Depends(get_current_admin)):
+    """Elimina los sobrantes conservando la visita original de cada grupo.
+    Antes de borrar guarda una copia en visitas_duplicadas_eliminadas."""
+    duplicados = await _detectar_duplicados()
+
+    respaldo = []
+    ids = []
+    for _, descartadas in duplicados:
+        for d in descartadas:
+            if not d.get("id"):
+                continue
+            ids.append(d["id"])
+            copia = {k: val for k, val in d.items() if k != "_id"}
+            copia["eliminado_en"] = datetime.utcnow()
+            copia["eliminado_por"] = current_user.full_name
+            respaldo.append(copia)
+
+    if not ids:
+        return {"ok": True, "eliminadas": 0, "grupos": 0, "respaldo": 0}
+
+    await db.visitas_duplicadas_eliminadas.insert_many(respaldo)
+    result = await db.visits.delete_many({"id": {"$in": ids}})
+
+    logger.info(
+        f"{current_user.full_name} elimino {result.deleted_count} visitas duplicadas "
+        f"de {len(duplicados)} grupos"
+    )
+
+    return {
+        "ok": True,
+        "eliminadas": result.deleted_count,
+        "grupos": len(duplicados),
+        "respaldo": len(respaldo),
+    }
+
+
 @admin_router.get("/stats/db-size")
 async def db_size(current_user: User = Depends(get_current_admin)):
     total_visits = await db.visits.count_documents({})
