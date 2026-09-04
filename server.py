@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import os
 import logging
 from pathlib import Path
@@ -91,6 +92,7 @@ class Visit(BaseModel):
     hora_regreso: Optional[str] = None       # hora estimada de regreso (pendiente)
     reagenda_fecha: Optional[str] = None     # fecha nueva (reagendada)
     reagenda_hora: Optional[str] = None      # hora nueva (reagendada)
+    client_uid: Optional[str] = None         # id unico del celular (anti-duplicados)
     synced: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -111,6 +113,7 @@ class VisitCreate(BaseModel):
     hora_regreso: Optional[str] = None
     reagenda_fecha: Optional[str] = None
     reagenda_hora: Optional[str] = None
+    client_uid: Optional[str] = None         # id unico del celular (anti-duplicados)
 
 class VisitUpdate(BaseModel):
     medico_nombre: Optional[str] = None
@@ -519,31 +522,69 @@ async def delete_user(user_id: str, current_user: User = Depends(get_current_adm
 
 @visits_router.post("/", response_model=Visit)
 async def create_visit(visit_data: VisitCreate, current_user: User = Depends(get_current_user)):
+    """Registra una visita. Es IDEMPOTENTE: si llega dos veces el mismo
+    client_uid (reintento, timeout o doble toque) devuelve la visita ya
+    guardada en vez de crear un duplicado."""
     visit_dict = visit_data.dict()
     visit_dict['visitador_id'] = current_user.id
     visit_dict['visitador_name'] = current_user.full_name
     visit_dict['synced'] = True
-    
+
+    client_uid = visit_dict.get('client_uid')
+    if client_uid:
+        existente = await db.visits.find_one({"client_uid": client_uid})
+        if existente:
+            logger.info(f"Visita duplicada ignorada (client_uid={client_uid})")
+            return Visit(**existente)
+
     visit_obj = Visit(**visit_dict)
-    await db.visits.insert_one(visit_obj.dict())
-    
+    try:
+        await db.visits.insert_one(visit_obj.dict())
+    except DuplicateKeyError:
+        existente = await db.visits.find_one({"client_uid": client_uid})
+        if existente:
+            return Visit(**existente)
+        raise
+
     return visit_obj
 
 @visits_router.post("/batch-sync")
 async def batch_sync_visits(batch: VisitBatchSync, current_user: User = Depends(get_current_user)):
-    visits_to_insert = []
+    """Sincroniza visitas guardadas offline. Omite las que ya existen
+    (mismo client_uid) para no duplicar cuando el lote se reenvia."""
+    insertadas = 0
+    omitidas = 0
+    vistos_en_lote = set()
+
     for visit_data in batch.visits:
         visit_dict = visit_data.dict()
         visit_dict['visitador_id'] = current_user.id
         visit_dict['visitador_name'] = current_user.full_name
         visit_dict['synced'] = True
+
+        cuid = visit_dict.get('client_uid')
+        if cuid:
+            # duplicado dentro del mismo lote
+            if cuid in vistos_en_lote:
+                omitidas += 1
+                continue
+            vistos_en_lote.add(cuid)
+            # ya guardada en una sincronizacion anterior
+            if await db.visits.find_one({"client_uid": cuid}):
+                omitidas += 1
+                continue
+
         visit_obj = Visit(**visit_dict)
-        visits_to_insert.append(visit_obj.dict())
-    
-    if visits_to_insert:
-        await db.visits.insert_many(visits_to_insert)
-    
-    return {"status": "success", "synced_count": len(visits_to_insert)}
+        try:
+            await db.visits.insert_one(visit_obj.dict())
+            insertadas += 1
+        except DuplicateKeyError:
+            omitidas += 1
+
+    if omitidas:
+        logger.info(f"batch-sync: {insertadas} insertadas, {omitidas} duplicadas omitidas")
+
+    return {"status": "success", "synced_count": insertadas, "duplicados_omitidos": omitidas}
 
 @visits_router.get("/", response_model=List[Visit])
 async def get_visits(
@@ -1485,6 +1526,19 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_db():
+    # Indice unico anti-duplicados: solo aplica a documentos que traen client_uid,
+    # asi las visitas antiguas (sin ese campo) no se ven afectadas.
+    try:
+        await db.visits.create_index(
+            "client_uid",
+            unique=True,
+            partialFilterExpression={"client_uid": {"$type": "string"}},
+            name="uniq_client_uid",
+        )
+        logger.info("Indice uniq_client_uid listo")
+    except Exception as e:
+        logger.warning(f"No se pudo crear el indice uniq_client_uid: {e}")
+
     # Crear usuario admin por defecto si no existe
     admin_exists = await db.users.find_one({"username": "admin"})
     if not admin_exists:
