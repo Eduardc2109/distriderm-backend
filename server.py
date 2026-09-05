@@ -1432,6 +1432,9 @@ async def get_visitadores_lista(current_user: User = Depends(get_current_admin))
 # =================
 # Rastreo de recorrido (jornada laboral)
 # =================
+# admin_router se define aqui, antes de la seccion de rastreo, porque
+# algunos endpoints de rastreo (ubicacion bajo demanda) cuelgan de el.
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
 rastreo_router = APIRouter(prefix="/rastreo", tags=["rastreo"])
 
 RASTREO_RETENCION_DIAS = 90
@@ -1601,8 +1604,6 @@ async def ver_recorrido(
 # =================
 # Admin: gestión de datos
 # =================
-admin_router = APIRouter(prefix="/admin", tags=["admin"])
-
 class ArchivePeriodoRequest(BaseModel):
     periodo: str  # ej: "2025-Q1"
 
