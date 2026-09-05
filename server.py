@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
+import math
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -92,6 +93,9 @@ class Visit(BaseModel):
     hora_regreso: Optional[str] = None       # hora estimada de regreso (pendiente)
     reagenda_fecha: Optional[str] = None     # fecha nueva (reagendada)
     reagenda_hora: Optional[str] = None      # hora nueva (reagendada)
+    ubicacion_precision: Optional[float] = None   # exactitud del GPS en metros
+    ubicacion_mock: Optional[bool] = None         # true si Android reporta ubicacion simulada
+    distancia_medico_m: Optional[float] = None    # metros entre la visita y el consultorio registrado
     client_uid: Optional[str] = None         # id unico del celular (anti-duplicados)
     synced: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -113,6 +117,9 @@ class VisitCreate(BaseModel):
     hora_regreso: Optional[str] = None
     reagenda_fecha: Optional[str] = None
     reagenda_hora: Optional[str] = None
+    ubicacion_precision: Optional[float] = None   # exactitud del GPS en metros
+    ubicacion_mock: Optional[bool] = None         # true si Android reporta ubicacion simulada
+    distancia_medico_m: Optional[float] = None    # metros entre la visita y el consultorio registrado
     client_uid: Optional[str] = None         # id unico del celular (anti-duplicados)
 
 class VisitUpdate(BaseModel):
@@ -126,6 +133,26 @@ class VisitUpdate(BaseModel):
     hora_regreso: Optional[str] = None
     reagenda_fecha: Optional[str] = None
     reagenda_hora: Optional[str] = None
+
+class PuntoRastreo(BaseModel):
+    lat: float
+    lng: float
+    precision: Optional[float] = None
+    mock: Optional[bool] = None
+    bateria: Optional[int] = None
+    timestamp: datetime
+
+class RespuestaUbicacion(BaseModel):
+    solicitud_id: str
+    lat: float
+    lng: float
+    precision: Optional[float] = None
+    mock: Optional[bool] = None
+    bateria: Optional[int] = None
+    timestamp: datetime
+
+class RastreoBatch(BaseModel):
+    puntos: List[PuntoRastreo]
 
 class VisitBatchSync(BaseModel):
     visits: List[VisitCreate]
@@ -1403,6 +1430,175 @@ async def get_visitadores_lista(current_user: User = Depends(get_current_admin))
 
 
 # =================
+# Rastreo de recorrido (jornada laboral)
+# =================
+rastreo_router = APIRouter(prefix="/rastreo", tags=["rastreo"])
+
+RASTREO_RETENCION_DIAS = 90
+
+
+@rastreo_router.post("/batch")
+async def guardar_rastreo(batch: RastreoBatch, current_user: User = Depends(get_current_user)):
+    """Recibe los puntos del recorrido acumulados por el dispositivo."""
+    if not batch.puntos:
+        return {"ok": True, "guardados": 0}
+
+    docs = []
+    for pt in batch.puntos:
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "visitador_id": current_user.id,
+            "visitador_name": current_user.full_name,
+            "lat": pt.lat,
+            "lng": pt.lng,
+            "precision": pt.precision,
+            "mock": pt.mock,
+            "bateria": pt.bateria,
+            "timestamp": pt.timestamp,
+            "created_at": datetime.utcnow(),
+        })
+
+    await db.rastreo.insert_many(docs)
+    return {"ok": True, "guardados": len(docs)}
+
+
+# ── Ubicacion bajo demanda ──────────────────────────────────────────────
+# El admin crea una solicitud; la app del visitador la ve, toma una lectura
+# de GPS y la responde. No hay rastreo continuo ni notificacion permanente.
+
+SOLICITUD_RETENCION_DIAS = 7
+
+
+@admin_router.post("/solicitar-ubicacion/{visitador_id}")
+async def solicitar_ubicacion(visitador_id: str, current_user: User = Depends(get_current_admin)):
+    """El admin pide la ubicacion actual de un visitador."""
+    solicitud = {
+        "id": str(uuid.uuid4()),
+        "visitador_id": visitador_id,
+        "estado": "pendiente",
+        "solicitada_por": current_user.full_name,
+        "creada": datetime.utcnow(),
+        "respondida": None,
+        "lat": None,
+        "lng": None,
+        "precision": None,
+        "mock": None,
+        "bateria": None,
+        "capturada_en": None,
+    }
+    await db.solicitudes_ubicacion.insert_one(solicitud)
+    return {"ok": True, "solicitud_id": solicitud["id"]}
+
+
+@admin_router.get("/solicitud-ubicacion/{solicitud_id}")
+async def estado_solicitud(solicitud_id: str, current_user: User = Depends(get_current_admin)):
+    """El admin consulta si la solicitud ya fue respondida."""
+    sol = await db.solicitudes_ubicacion.find_one({"id": solicitud_id})
+    if not sol:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    return {
+        "id": sol["id"],
+        "estado": sol["estado"],
+        "lat": sol.get("lat"),
+        "lng": sol.get("lng"),
+        "precision": sol.get("precision"),
+        "mock": sol.get("mock"),
+        "bateria": sol.get("bateria"),
+        "capturada_en": sol.get("capturada_en"),
+        "creada": sol.get("creada"),
+    }
+
+
+@rastreo_router.get("/solicitud-pendiente")
+async def solicitud_pendiente(current_user: User = Depends(get_current_user)):
+    """La app del visitador pregunta si hay una solicitud pendiente para el."""
+    sol = await db.solicitudes_ubicacion.find_one(
+        {"visitador_id": current_user.id, "estado": "pendiente"},
+        sort=[("creada", 1)],
+    )
+    if not sol:
+        return {"pendiente": False}
+    return {"pendiente": True, "solicitud_id": sol["id"]}
+
+
+@rastreo_router.post("/responder-ubicacion")
+async def responder_ubicacion(r: RespuestaUbicacion, current_user: User = Depends(get_current_user)):
+    """La app del visitador responde con su ubicacion actual."""
+    sol = await db.solicitudes_ubicacion.find_one({"id": r.solicitud_id})
+    if not sol:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if sol["visitador_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Solicitud de otro visitador")
+
+    await db.solicitudes_ubicacion.update_one(
+        {"id": r.solicitud_id},
+        {"$set": {
+            "estado": "respondida",
+            "lat": r.lat,
+            "lng": r.lng,
+            "precision": r.precision,
+            "mock": r.mock,
+            "bateria": r.bateria,
+            "capturada_en": r.timestamp,
+            "respondida": datetime.utcnow(),
+        }},
+    )
+    return {"ok": True}
+
+
+@admin_router.get("/rastreo/{visitador_id}")
+async def ver_recorrido(
+    visitador_id: str,
+    fecha: Optional[datetime] = None,
+    current_user: User = Depends(get_current_admin),
+):
+    """Recorrido de un visitador en un dia. Solo lectura, solo admin."""
+    base = fecha or datetime.utcnow()
+    inicio = base.replace(hour=0, minute=0, second=0, microsecond=0)
+    fin = inicio + timedelta(days=1)
+
+    puntos = await db.rastreo.find({
+        "visitador_id": visitador_id,
+        "timestamp": {"$gte": inicio, "$lt": fin},
+    }).sort("timestamp", 1).to_list(3000)
+
+    salida = [{
+        "lat": p.get("lat"),
+        "lng": p.get("lng"),
+        "precision": p.get("precision"),
+        "mock": p.get("mock"),
+        "bateria": p.get("bateria"),
+        "timestamp": p.get("timestamp"),
+    } for p in puntos]
+
+    # Distancia total recorrida en el dia
+    total_m = 0.0
+    for a, b in zip(salida, salida[1:]):
+        if None in (a["lat"], a["lng"], b["lat"], b["lng"]):
+            continue
+        R = 6371000
+        dlat = math.radians(b["lat"] - a["lat"])
+        dlng = math.radians(b["lng"] - a["lng"])
+        h = (math.sin(dlat / 2) ** 2
+             + math.cos(math.radians(a["lat"])) * math.cos(math.radians(b["lat"]))
+             * math.sin(dlng / 2) ** 2)
+        total_m += 2 * R * math.asin(math.sqrt(h))
+
+    con_mock = sum(1 for p in salida if p.get("mock") is True)
+
+    return {
+        "visitador_id": visitador_id,
+        "fecha": inicio,
+        "total_puntos": len(salida),
+        "km_recorridos": round(total_m / 1000, 2),
+        "puntos_con_gps_falso": con_mock,
+        "primer_punto": salida[0]["timestamp"] if salida else None,
+        "ultimo_punto": salida[-1]["timestamp"] if salida else None,
+        "puntos": salida,
+    }
+
+
+# =================
 # Admin: gestión de datos
 # =================
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
@@ -1579,6 +1775,98 @@ async def limpiar_duplicados_endpoint(current_user: User = Depends(get_current_a
     }
 
 
+# ── Revision de ubicaciones sospechosas ─────────────────────────────────
+# Umbrales. Ajustables segun la realidad de campo.
+PRECISION_MALA_M = 200      # exactitud peor que esto: la coordenada no es confiable
+DISTANCIA_LEJOS_M = 500     # mas lejos que esto del consultorio registrado: revisar
+
+
+def _evaluar_ubicacion(v):
+    """Devuelve la lista de motivos por los que una visita es sospechosa.
+    Lista vacia = la ubicacion no presenta problemas."""
+    motivos = []
+
+    if v.get("ubicacion_mock") is True:
+        motivos.append("App de GPS falso activa en el dispositivo")
+
+    lat = v.get("ubicacion_lat")
+    lng = v.get("ubicacion_lng")
+    if (lat in (None, 0)) and (lng in (None, 0)):
+        motivos.append("Visita registrada sin ubicacion")
+
+    prec = v.get("ubicacion_precision")
+    if prec is not None and prec > PRECISION_MALA_M:
+        motivos.append(f"Precision muy baja ({int(prec)} m)")
+
+    dist = v.get("distancia_medico_m")
+    if dist is not None and dist > DISTANCIA_LEJOS_M:
+        if dist >= 1000:
+            motivos.append(f"A {dist / 1000:.1f} km del consultorio registrado")
+        else:
+            motivos.append(f"A {int(dist)} m del consultorio registrado")
+
+    return motivos
+
+
+@admin_router.get("/ubicaciones-sospechosas")
+async def ubicaciones_sospechosas(
+    dias: int = 30,
+    visitador_id: Optional[str] = None,
+    current_user: User = Depends(get_current_admin),
+):
+    """Visitas cuya ubicacion no cuadra. Solo lectura, solo admin."""
+    desde = datetime.utcnow() - timedelta(days=dias)
+    filtro = {"fecha": {"$gte": desde}}
+    if visitador_id:
+        filtro["visitador_id"] = visitador_id
+
+    visitas = await db.visits.find(filtro).to_list(5000)
+
+    sospechosas = []
+    for v in visitas:
+        motivos = _evaluar_ubicacion(v)
+        if not motivos:
+            continue
+        sospechosas.append({
+            "id": v.get("id"),
+            "medico_nombre": v.get("medico_nombre"),
+            "visitador_id": v.get("visitador_id"),
+            "visitador_name": v.get("visitador_name"),
+            "fecha": v.get("fecha"),
+            "hora_inicio": v.get("hora_inicio"),
+            "checkin_hora": v.get("checkin_hora"),
+            "ubicacion_lat": v.get("ubicacion_lat"),
+            "ubicacion_lng": v.get("ubicacion_lng"),
+            "checkin_direccion": v.get("checkin_direccion"),
+            "ubicacion_mock": v.get("ubicacion_mock"),
+            "ubicacion_precision": v.get("ubicacion_precision"),
+            "distancia_medico_m": v.get("distancia_medico_m"),
+            "motivos": motivos,
+        })
+
+    sospechosas.sort(key=lambda x: x.get("fecha") or datetime.min, reverse=True)
+
+    # Resumen por visitador: quien acumula mas incidencias
+    por_visitador = {}
+    for s in sospechosas:
+        k = s.get("visitador_name") or "Sin nombre"
+        d = por_visitador.setdefault(k, {"visitador_name": k, "total": 0, "con_gps_falso": 0})
+        d["total"] += 1
+        if s.get("ubicacion_mock") is True:
+            d["con_gps_falso"] += 1
+
+    resumen = sorted(por_visitador.values(), key=lambda x: x["total"], reverse=True)
+
+    return {
+        "dias": dias,
+        "total_visitas": len(visitas),
+        "total_sospechosas": len(sospechosas),
+        "con_gps_falso": sum(1 for s in sospechosas if s.get("ubicacion_mock") is True),
+        "resumen_por_visitador": resumen,
+        "detalle": sospechosas[:200],
+    }
+
+
 @admin_router.get("/stats/db-size")
 async def db_size(current_user: User = Depends(get_current_admin)):
     total_visits = await db.visits.count_documents({})
@@ -1601,6 +1889,7 @@ api_router.include_router(stats_router)
 api_router.include_router(users_router)
 api_router.include_router(listas_router)
 api_router.include_router(reportes_router)
+api_router.include_router(rastreo_router)
 api_router.include_router(admin_router)
 
 app.include_router(api_router)
@@ -1656,6 +1945,31 @@ async def startup_db():
         logger.info("Indice uniq_client_uid listo")
     except Exception as e:
         logger.warning(f"No se pudo crear el indice uniq_client_uid: {e}")
+
+    # Rastreo: consulta por visitador+fecha, y purga automatica a los 90 dias
+    # para que el recorrido no haga crecer la base indefinidamente.
+    try:
+        await db.rastreo.create_index([("visitador_id", 1), ("timestamp", 1)], name="rastreo_visitador_fecha")
+        await db.rastreo.create_index(
+            "created_at",
+            expireAfterSeconds=RASTREO_RETENCION_DIAS * 24 * 3600,
+            name="rastreo_ttl",
+        )
+        logger.info(f"Indices de rastreo listos (retencion {RASTREO_RETENCION_DIAS} dias)")
+    except Exception as e:
+        logger.warning(f"No se pudieron crear los indices de rastreo: {e}")
+
+    # Solicitudes de ubicacion bajo demanda: purga automatica a los 7 dias
+    try:
+        await db.solicitudes_ubicacion.create_index([("visitador_id", 1), ("estado", 1)], name="solicitud_visitador_estado")
+        await db.solicitudes_ubicacion.create_index(
+            "creada",
+            expireAfterSeconds=SOLICITUD_RETENCION_DIAS * 24 * 3600,
+            name="solicitud_ttl",
+        )
+        logger.info("Indices de solicitudes de ubicacion listos")
+    except Exception as e:
+        logger.warning(f"No se pudieron crear los indices de solicitudes: {e}")
 
     # Crear usuario admin por defecto si no existe
     admin_exists = await db.users.find_one({"username": "admin"})
