@@ -1868,6 +1868,71 @@ async def ubicaciones_sospechosas(
     }
 
 
+@admin_router.get("/ubicaciones-todos")
+async def ubicaciones_todos(current_user: User = Depends(get_current_admin)):
+    """Ultima ubicacion conocida de cada visitador, para el mapa general.
+    Usa el ultimo punto de rastreo; si no hay, la ultima visita con ubicacion."""
+    visitadores = await db.users.find({"role": {"$ne": "admin"}}).to_list(1000)
+
+    resultado = []
+    for u in visitadores:
+        vid = u["id"]
+        fuente = None
+        punto = await db.rastreo.find_one({"visitador_id": vid}, sort=[("timestamp", -1)])
+
+        if punto and punto.get("lat") is not None:
+            fuente = "rastreo"
+            lat, lng = punto["lat"], punto["lng"]
+            cuando = punto.get("timestamp")
+            bateria = punto.get("bateria")
+            mock = punto.get("mock")
+            precision = punto.get("precision")
+        else:
+            visita = await db.visits.find_one(
+                {"visitador_id": vid, "ubicacion_lat": {"$nin": [0, None]}},
+                sort=[("hora_inicio", -1)],
+            )
+            if visita and visita.get("ubicacion_lat"):
+                fuente = "visita"
+                lat, lng = visita["ubicacion_lat"], visita["ubicacion_lng"]
+                cuando = visita.get("hora_inicio")
+                bateria = None
+                mock = visita.get("ubicacion_mock")
+                precision = visita.get("ubicacion_precision")
+            else:
+                # Sin ninguna ubicacion conocida
+                resultado.append({
+                    "visitador_id": vid,
+                    "visitador_name": u.get("full_name"),
+                    "tiene_ubicacion": False,
+                })
+                continue
+
+        # Antiguedad del dato en minutos
+        edad_min = None
+        if cuando:
+            try:
+                edad_min = int((datetime.utcnow() - cuando).total_seconds() / 60)
+            except Exception:
+                edad_min = None
+
+        resultado.append({
+            "visitador_id": vid,
+            "visitador_name": u.get("full_name"),
+            "tiene_ubicacion": True,
+            "fuente": fuente,
+            "lat": lat,
+            "lng": lng,
+            "precision": precision,
+            "bateria": bateria,
+            "mock": mock,
+            "cuando": cuando,
+            "edad_min": edad_min,
+        })
+
+    return {"total": len(resultado), "dispositivos": resultado}
+
+
 @admin_router.get("/stats/db-size")
 async def db_size(current_user: User = Depends(get_current_admin)):
     total_visits = await db.visits.count_documents({})
