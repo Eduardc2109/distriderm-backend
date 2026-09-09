@@ -22,9 +22,24 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL')
+db_name = os.environ.get('DB_NAME')
+if not mongo_url or not db_name:
+    # Si faltan las variables, se registra claramente en vez de crashear al arrancar
+    # (un crash en el arranque hace que Railway reintente y termine dejando el server caido).
+    logging.getLogger(__name__).error("FALTA MONGO_URL o DB_NAME en las variables de entorno")
+
+# Timeouts CORTOS: si Mongo tarda, la API responde rapido con error en vez de
+# quedarse colgada 30s (que es lo que hacia ver 'sin conexion' a los visitadores).
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=5000,   # 5s para elegir servidor, no 30s
+    connectTimeoutMS=5000,
+    socketTimeoutMS=20000,
+    maxPoolSize=50,
+    retryWrites=True,
+)
+db = client[db_name]
 
 # JWT and password hashing configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'tu_clave_secreta_super_segura_cambiar_en_produccion')
@@ -1990,6 +2005,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Endpoints de salud (para Railway y para monitoreo) ──────────────────
+# Responden rapido y NO dependen de Mongo, para saber si el proceso esta vivo.
+@app.get("/")
+async def raiz():
+    return {"servicio": "distriderm-backend", "estado": "ok"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/health")
+async def health_api():
+    """Salud + prueba rapida de Mongo (con timeout corto). Sirve para diagnostico."""
+    mongo_ok = False
+    try:
+        await client.admin.command("ping")
+        mongo_ok = True
+    except Exception:
+        mongo_ok = False
+    return {"status": "ok", "mongo": mongo_ok}
+
+
+# ── Manejador global de errores ─────────────────────────────────────────
+# Si una peticion lanza un error no controlado, se responde 500 en vez de
+# arriesgar que el worker muera. Un error en una request no debe tumbar el server.
+from fastapi import Request
+
+@app.exception_handler(Exception)
+async def error_no_controlado(request: Request, exc: Exception):
+    logging.getLogger(__name__).error(f"Error no controlado en {request.url.path}: {exc}")
+    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -2037,20 +2087,26 @@ async def startup_db():
     except Exception as e:
         logger.warning(f"No se pudieron crear los indices de solicitudes: {e}")
 
-    # Crear usuario admin por defecto si no existe
-    admin_exists = await db.users.find_one({"username": "admin"})
-    if not admin_exists:
-        admin_user = UserInDB(
-            id=str(uuid.uuid4()),
-            username="admin",
-            full_name="Administrador",
-            role="admin",
-            hashed_password=get_password_hash("admin123"),
-            is_active=True,
-            created_at=datetime.utcnow()
-        )
-        await db.users.insert_one(admin_user.dict())
-        logger.info("Usuario admin creado: username=admin, password=admin123")
+    # Crear usuario admin por defecto si no existe.
+    # Envuelto en try/except: si Mongo esta temporalmente caido al arrancar,
+    # el servidor IGUAL levanta y responde /health, en vez de crashear y entrar
+    # en bucle de reinicios (que dejaba el server caido todo el dia).
+    try:
+        admin_exists = await db.users.find_one({"username": "admin"})
+        if not admin_exists:
+            admin_user = UserInDB(
+                id=str(uuid.uuid4()),
+                username="admin",
+                full_name="Administrador",
+                role="admin",
+                hashed_password=get_password_hash("admin123"),
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            await db.users.insert_one(admin_user.dict())
+            logger.info("Usuario admin creado: username=admin, password=admin123")
+    except Exception as e:
+        logger.error(f"No se pudo verificar/crear el admin al arrancar (Mongo?): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
