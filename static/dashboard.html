@@ -81,6 +81,7 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #fff; padding: 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; }
     .tab-btn.active { background: #007AFF; color: #fff; }
+    /* tabs manejados por JS */
     .listas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 700px) { .listas-grid { grid-template-columns: 1fr; } }
     .lista-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
@@ -100,6 +101,7 @@
     .lista-item-sub { font-size: 12px; color: #888; margin-top: 2px; }
     .lista-item-badge { background: #007AFF22; color: #007AFF; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; }
 
+    /* Tabs */
     .chart-wrap { position: relative; height: 280px; }
 
     .visitadores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -132,6 +134,7 @@
     .pill-no-visitado { background: #FFEBEE; color: #F44336; }
     .pill-pendiente   { background: #FFF3E0; color: #FF9800; }
     .pill-reagendada  { background: #F3E5F5; color: #9C27B0; }
+    .pill-nuevo       { background: #E0F7FA; color: #00838F; }
 
     #loading { display: none; text-align: center; padding: 60px; }
     .spinner { width: 48px; height: 48px; border: 4px solid #e0e0e0; border-top-color: #007AFF; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
@@ -172,10 +175,8 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab-btn active">📊 Reporte Mensual</button>
-      <a href="/listas" style="flex:1;text-decoration:none">
-        <button class="tab-btn" style="width:100%">📋 Gestión de Listas</button>
-      </a>
+      <button class="tab-btn active" onclick="switchTab('reporte', this)">📊 Reporte Mensual</button>
+      <button class="tab-btn" onclick="switchTab('listas', this)">📋 Gestión de Listas</button>
     </div>
 
     <!-- Tab Reporte -->
@@ -216,6 +217,9 @@
 
     <div id="reporte-content" style="display:none">
       <div class="resumen-grid" id="resumen-grid"></div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button onclick="exportarExcel()" style="background:#1D6F42;color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer">⬇️ Exportar a Excel</button>
+      </div>
       <div class="charts-row">
         <div class="chart-card">
           <h3>🥧 Visitados vs No Visitados</h3>
@@ -229,19 +233,20 @@
       <h2 style="font-size:17px;font-weight:700;margin-bottom:16px">👥 Detalle por Visitador</h2>
       <div class="visitadores-grid" id="visitadores-grid"></div>
       <div class="tabla-section">
-        <h3>❌ Médicos No Visitados</h3>
-        <p class="sub">Médicos de la lista original que no recibieron visita completa este mes</p>
+        <h3>📋 Detalle de Médicos</h3>
+        <p class="sub">No visitados, pendientes, reagendados y nuevos (visitados fuera de la lista original)</p>
         <div class="tabla-filtros">
           <input class="search-input" type="text" id="search-medico" placeholder="🔍 Buscar médico..." oninput="filtrarTabla()" />
           <button class="chip active" onclick="filtrarEstado(this,'todos')">Todos</button>
           <button class="chip" onclick="filtrarEstado(this,'no_visitado')">❌ No visitados</button>
           <button class="chip" onclick="filtrarEstado(this,'pendiente')">⏱ Pendientes</button>
           <button class="chip" onclick="filtrarEstado(this,'reagendada')">📅 Reagendados</button>
+          <button class="chip" onclick="filtrarEstado(this,'nuevo')">🆕 Nuevos</button>
         </div>
         <div style="overflow-x:auto">
           <table>
             <thead><tr>
-              <th>Médico</th><th>Especialidad</th><th>Ciudad</th><th>Visitador</th><th>Estado</th>
+              <th>Médico</th><th>Especialidad</th><th>Ciudad</th><th>Visitador</th><th>Estado</th><th>Nuevo</th>
             </tr></thead>
             <tbody id="tabla-body"></tbody>
           </table>
@@ -253,7 +258,42 @@
     </div><!-- /tab-reporte -->
 
     <!-- Tab Listas -->
-    
+    <div id="tab-listas" style="display:none;min-height:400px;width:100%;box-sizing:border-box;padding:0 16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;box-sizing:border-box">
+
+        <!-- Subir lista -->
+        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">⬆️ Subir lista de médicos</h3>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Visitador</label>
+            <select id="lista-visitador" style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px">
+              <option value="">— Selecciona visitador —</option>
+            </select>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Ciudad</label>
+            <input type="text" id="lista-ciudad" placeholder="Ej: Quito, Guayaquil..." style="width:100%;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box" />
+          </div>
+          <div id="drop-zone" onclick="document.getElementById('csv-input').click()" style="border:2px dashed #007AFF;border-radius:12px;padding:32px;text-align:center;cursor:pointer;color:#007AFF;font-weight:600;background:#f0f7ff;margin-bottom:14px">
+            <div style="font-size:32px;margin-bottom:8px">📄</div>
+            <div id="drop-zone-text">Haz clic para seleccionar el CSV</div>
+            <div style="font-size:12px;color:#888;margin-top:4px">Columnas: Nombre, Especialidad, Dirección</div>
+          </div>
+          <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="archivoSeleccionado(this)" />
+          <button id="btn-subir" onclick="subirLista()" disabled style="width:100%;background:#34A853;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Subir Lista</button>
+          <div id="upload-result" style="display:none;margin-top:12px;padding:12px;border-radius:10px;font-size:14px"></div>
+        </div>
+
+        <!-- Listas existentes -->
+        <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">📂 Listas en el servidor</h3>
+          <div id="listas-existentes">
+            <p style="color:#888;text-align:center;padding:20px">Cargando...</p>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /tab-listas -->
 
   </div>
   <footer>Distriderm &copy; 2025 &mdash; Dashboard de Supervisión</footer>
@@ -390,6 +430,7 @@
         {label:'No visitados',value:g.no_visitados,color:'#F44336',icon:'❌'},
         {label:'Pendientes',value:g.pendientes,color:'#FF9800',icon:'⏱'},
         {label:'Reagendados',value:g.reagendados,color:'#9C27B0',icon:'📅'},
+        {label:'Nuevos',value:g.nuevos||0,color:'#00838F',icon:'🆕'},
         {label:'Visitadores',value:r.total_visitadores,color:'#607D8B',icon:'👥'},
       ].map(s => `<div class="stat-card" style="border-top-color:${s.color}">
         <div style="font-size:24px">${s.icon}</div>
@@ -449,6 +490,7 @@
           <span class="badge" style="background:#FFEBEE;color:#F44336">❌ ${v.no_visitados} sin visita</span>
           ${v.pendientes>0?`<span class="badge" style="background:#FFF3E0;color:#FF9800">⏱ ${v.pendientes} pendientes</span>`:''}
           ${v.reagendados>0?`<span class="badge" style="background:#F3E5F5;color:#9C27B0">📅 ${v.reagendados} reagendados</span>`:''}
+          ${(v.nuevos||0)>0?`<span class="badge" style="background:#E0F7FA;color:#00838F">🆕 ${v.nuevos} nuevos</span>`:''}
         </div>
         <div style="margin-top:8px;font-size:12px;color:#888">
           ${v.ciudades.map(c=>`<span style="margin-right:8px">📍 ${c.ciudad}: <b>${c.porcentaje_cumplimiento}%</b></span>`).join('')}
@@ -460,19 +502,58 @@
     // Tabla
     window._tablaMedicos = [];
     r.visitadores.forEach(v => v.ciudades.forEach(c => c.medicos.forEach(m => {
-      if (m.estado !== 'completa') window._tablaMedicos.push({
+      // Mostrar los que no fueron visita completa, y ademas los NUEVOS (fuera de lista)
+      if (m.estado !== 'completa' || m.es_nuevo) window._tablaMedicos.push({
         nombre: m.nombre, especialidad: m.especialidad,
         ciudad: c.ciudad, visitador: v.visitador_name,
         estado: m.estado || 'no_visitado',
+        es_nuevo: !!m.es_nuevo,
+        fecha: m.fecha_visita || '',
       });
     })));
     filtrarTabla();
   }
 
+  function exportarExcel() {
+    if (!reporteData) return;
+    const r = reporteData;
+    const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const estadoTxt = m => m.estado === 'pendiente' ? 'Pendiente'
+      : m.estado === 'reagendada' ? 'Reagendado'
+      : (m.visitado || m.estado === 'completa') ? 'Visitado' : 'No visitado';
+    const filas = [];
+    filas.push(q('REPORTE MENSUAL ' + MESES[r.mes] + ' ' + r.anio));
+    filas.push('');
+    filas.push('RESUMEN POR VISITADOR');
+    filas.push(['Visitador','Total lista','Visitados','No visitados','Pendientes','Reagendados','Nuevos','% Cumplimiento'].map(q).join(';'));
+    r.visitadores.forEach(v => filas.push(
+      [v.visitador_name, v.total_lista, v.visitados, v.no_visitados, v.pendientes, v.reagendados, v.nuevos||0, v.porcentaje_cumplimiento + '%'].map(q).join(';')
+    ));
+    filas.push('');
+    filas.push('DETALLE POR MEDICO');
+    filas.push(['Visitador','Ciudad','Medico','Especialidad','Estado','Nuevo','Fecha visita'].map(q).join(';'));
+    r.visitadores.forEach(v => v.ciudades.forEach(c => c.medicos.forEach(m => {
+      filas.push([v.visitador_name, c.ciudad, m.nombre, m.especialidad||'', estadoTxt(m), m.es_nuevo?'Si':'No', m.fecha_visita||''].map(q).join(';'));
+    })));
+    const csv = '\ufeff' + filas.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const filtroV = document.getElementById('sel-visitador');
+    const sufijo = (filtroV && filtroV.value && filtroV.selectedOptions[0]) ? '_' + filtroV.selectedOptions[0].textContent.replace(/\s+/g,'_') : '';
+    a.href = url;
+    a.download = 'reporte_' + MESES[r.mes] + '_' + r.anio + sufijo + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function filtrarTabla() {
     const busqueda = document.getElementById('search-medico').value.toLowerCase();
     const filas = (window._tablaMedicos||[]).filter(f =>
-      (filtroEstadoActual === 'todos' || f.estado === filtroEstadoActual) &&
+      (filtroEstadoActual === 'todos'
+        || (filtroEstadoActual === 'nuevo' && f.es_nuevo)
+        || (filtroEstadoActual !== 'nuevo' && f.estado === filtroEstadoActual)) &&
       (f.nombre.toLowerCase().includes(busqueda) || f.ciudad.toLowerCase().includes(busqueda) || f.visitador.toLowerCase().includes(busqueda))
     );
     const tbody = document.getElementById('tabla-body');
@@ -480,12 +561,15 @@
     if (filas.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
     empty.style.display = 'none';
     tbody.innerHTML = filas.map(f => {
-      const pill = f.estado === 'pendiente'
+      const pill = f.es_nuevo
+        ? '<span class="estado-pill pill-nuevo">🆕 Nuevo (visitado)</span>'
+        : f.estado === 'pendiente'
         ? '<span class="estado-pill pill-pendiente">⏱ Pendiente</span>'
         : f.estado === 'reagendada'
         ? '<span class="estado-pill pill-reagendada">📅 Reagendado</span>'
         : '<span class="estado-pill pill-no-visitado">❌ No visitado</span>';
-      return `<tr><td><strong>${f.nombre}</strong></td><td style="color:#888">${f.especialidad}</td><td>📍 ${f.ciudad}</td><td>👤 ${f.visitador}</td><td>${pill}</td></tr>`;
+      const nuevoCol = f.es_nuevo ? '<span style="color:#00838F;font-weight:700">Sí</span>' : '<span style="color:#bbb">No</span>';
+      return `<tr><td><strong>${f.nombre}</strong></td><td style="color:#888">${f.especialidad||''}</td><td>📍 ${f.ciudad}</td><td>👤 ${f.visitador}</td><td>${pill}</td><td>${nuevoCol}</td></tr>`;
     }).join('');
   }
 
@@ -496,6 +580,128 @@
     filtrarTabla();
   }
 
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  function switchTab(tab, btn) {
+    // Ocultar todos los tabs
+    ['tab-reporte', 'tab-listas'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+    // Mostrar el seleccionado
+    document.getElementById('tab-' + tab).style.display = 'block';
+    // Actualizar botones
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (tab === 'listas') cargarListasPanel();
+  }
+
+  // ── Gestión de listas ──────────────────────────────────────────────────────
+  let csvData = null;
+
+  async function cargarListasPanel() {
+    try {
+      const res = await fetch(`${API}/api/users/`, { headers: authHeaders() });
+      const users = await res.json();
+      const sel = document.getElementById('lista-visitador');
+      sel.innerHTML = '<option value="">— Selecciona visitador —</option>';
+      users.filter(u => u.role === 'visitador').forEach(u => {
+        sel.innerHTML += `<option value="${u.id}">${u.full_name}</option>`;
+      });
+    } catch(e) { console.error(e); }
+
+    try {
+      const res = await fetch(`${API}/api/listas/`, { headers: authHeaders() });
+      const listas = await res.json();
+      const cont = document.getElementById('listas-existentes');
+      if (!listas.length) {
+        cont.innerHTML = '<p style="color:#888;text-align:center;padding:20px">Sin listas cargadas</p>';
+        return;
+      }
+      cont.innerHTML = listas.map(l => `
+        <div class="lista-item">
+          <div>
+            <div class="lista-item-info">${l.visitador_name}</div>
+            <div class="lista-item-sub">📍 ${l.ciudad} · Actualizado: ${new Date(l.updated_at).toLocaleDateString('es')}</div>
+          </div>
+          <span class="lista-item-badge">${l.total} médicos</span>
+        </div>
+      `).join('');
+    } catch(e) {
+      document.getElementById('listas-existentes').innerHTML = '<p style="color:red">Error cargando listas</p>';
+    }
+  }
+
+  function archivoSeleccionado(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const sep = lines[0].includes('\t') ? '\t' : ',';
+      const clean = s => s.replace(/^["']|["']$/g, '').trim();
+      csvData = [];
+      for (let i = 0; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(clean);
+        const nombre = vals[0];
+        if (nombre && nombre.length > 1) {
+          csvData.push({ nombre, especialidad: vals[1] || 'No especificada', direccion: vals[2] || null });
+        }
+      }
+      document.getElementById('drop-zone').classList.add('has-file');
+      document.getElementById('drop-zone-text').textContent = `✅ ${file.name} — ${csvData.length} médicos`;
+      document.getElementById('btn-subir').disabled = false;
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  async function subirLista() {
+    const visitadorId = document.getElementById('lista-visitador').value;
+    const ciudad = document.getElementById('lista-ciudad').value.trim();
+    const result = document.getElementById('upload-result');
+    if (!visitadorId) { alert('Selecciona un visitador'); return; }
+    if (!ciudad) { alert('Ingresa la ciudad'); return; }
+    if (!csvData || csvData.length === 0) { alert('Selecciona un CSV válido'); return; }
+
+    document.getElementById('btn-subir').disabled = true;
+    document.getElementById('btn-subir').textContent = 'Subiendo...';
+    result.style.display = 'none';
+
+    try {
+      const ahora = new Date();
+      const res = await fetch(`${API}/api/listas/admin/subir?visitador_id=${visitadorId}`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ciudad,
+          mes: ahora.getMonth() + 1,
+          anio: ahora.getFullYear(),
+          medicos: csvData,
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        result.className = 'upload-result ok';
+        result.textContent = '✅ ' + data.mensaje;
+        result.style.display = 'block';
+        csvData = null;
+        document.getElementById('csv-input').value = '';
+        document.getElementById('drop-zone').classList.remove('has-file');
+        document.getElementById('drop-zone-text').textContent = 'Haz clic para seleccionar el CSV';
+        document.getElementById('lista-ciudad').value = '';
+        document.getElementById('lista-visitador').value = '';
+        cargarListasPanel();
+      } else {
+        throw new Error(data.detail || 'Error desconocido');
+      }
+    } catch(e) {
+      result.className = 'upload-result err';
+      result.textContent = '❌ Error: ' + e.message;
+      result.style.display = 'block';
+    } finally {
+      document.getElementById('btn-subir').disabled = false;
+      document.getElementById('btn-subir').textContent = 'Subir Lista';
+    }
+  }
 </script>
 </body>
 </html>
