@@ -267,6 +267,7 @@ class MedicoReporte(BaseModel):
     visitado: bool
     estado: Optional[str] = None   # completa | pendiente | reagendada | None
     fecha_visita: Optional[str] = None
+    es_nuevo: bool = False         # visitado pero NO estaba en la lista original
 
 class ReporteCiudad(BaseModel):
     ciudad: str
@@ -275,6 +276,7 @@ class ReporteCiudad(BaseModel):
     no_visitados: int
     pendientes: int
     reagendados: int
+    nuevos: int = 0
     porcentaje_cumplimiento: float
     medicos: List[MedicoReporte]
 
@@ -286,6 +288,7 @@ class ReporteVisitador(BaseModel):
     no_visitados: int
     pendientes: int
     reagendados: int
+    nuevos: int = 0
     porcentaje_cumplimiento: float
     ciudades: List[ReporteCiudad]
 
@@ -1343,16 +1346,22 @@ async def get_reporte_mensual(
         visitas_por_visitador[vid][nombre_norm] = {
             'estado': v.get('estado_visita', 'completa'),
             'fecha': v.get('fecha', '').isoformat()[:10] if v.get('fecha') else None,
+            'medico_nombre_original': v.get('medico_nombre'),
         }
 
     # Construir reporte por visitador
     reportes_visitadores = []
-    total_general = {'lista': 0, 'visitados': 0, 'no_visitados': 0, 'pendientes': 0, 'reagendados': 0}
+    total_general = {'lista': 0, 'visitados': 0, 'no_visitados': 0, 'pendientes': 0, 'reagendados': 0, 'nuevos': 0}
 
     for vid, data in listas_por_visitador.items():
         mis_visitas = visitas_por_visitador.get(vid, {})
         reporte_ciudades = []
-        v_total = v_visitados = v_no_visitados = v_pendientes = v_reagendados = 0
+        v_total = v_visitados = v_no_visitados = v_pendientes = v_reagendados = v_nuevos = 0
+        # Nombres que SI estan en la lista (para detectar visitas fuera de lista)
+        nombres_en_lista = set()
+        for _ciudad, _medicos in data['ciudades'].items():
+            for _m in _medicos:
+                nombres_en_lista.add(_m['nombre'].lower().strip())
 
         for ciudad, medicos in data['ciudades'].items():
             med_reportes = []
@@ -1390,6 +1399,7 @@ async def get_reporte_mensual(
                 no_visitados=c_no_visitados,
                 pendientes=c_pendientes,
                 reagendados=c_reagendados,
+                nuevos=0,
                 porcentaje_cumplimiento=pct,
                 medicos=med_reportes,
             ))
@@ -1400,6 +1410,41 @@ async def get_reporte_mensual(
             v_pendientes += c_pendientes
             v_reagendados += c_reagendados
 
+        # ── Medicos NUEVOS: visitados este mes pero que NO estaban en la lista ──
+        nuevos_reportes = []
+        for nombre_norm, info in mis_visitas.items():
+            if nombre_norm in nombres_en_lista:
+                continue
+            estado = info['estado']
+            visitado = estado == 'completa'
+            if estado == 'pendiente': c_p = (0, 1, 0)
+            elif estado == 'reagendada': c_p = (0, 0, 1)
+            else: c_p = (1, 0, 0)
+            v_visitados += c_p[0]; v_pendientes += c_p[1]; v_reagendados += c_p[2]
+            v_nuevos += 1
+            nuevos_reportes.append(MedicoReporte(
+                nombre=info.get('medico_nombre_original') or nombre_norm.title(),
+                especialidad='',
+                visitado=visitado,
+                estado=estado,
+                fecha_visita=info.get('fecha'),
+                es_nuevo=True,
+            ))
+
+        if nuevos_reportes:
+            reporte_ciudades.append(ReporteCiudad(
+                ciudad='Nuevos (fuera de lista)',
+                total_lista=len(nuevos_reportes),
+                visitados=sum(1 for m in nuevos_reportes if m.estado == 'completa'),
+                no_visitados=0,
+                pendientes=sum(1 for m in nuevos_reportes if m.estado == 'pendiente'),
+                reagendados=sum(1 for m in nuevos_reportes if m.estado == 'reagendada'),
+                nuevos=len(nuevos_reportes),
+                porcentaje_cumplimiento=0,
+                medicos=nuevos_reportes,
+            ))
+            v_total += len(nuevos_reportes)
+
         pct_v = round((v_visitados / v_total * 100), 1) if v_total > 0 else 0
         reportes_visitadores.append(ReporteVisitador(
             visitador_id=vid,
@@ -1409,6 +1454,7 @@ async def get_reporte_mensual(
             no_visitados=v_no_visitados,
             pendientes=v_pendientes,
             reagendados=v_reagendados,
+            nuevos=v_nuevos,
             porcentaje_cumplimiento=pct_v,
             ciudades=reporte_ciudades,
         ))
@@ -1418,6 +1464,7 @@ async def get_reporte_mensual(
         total_general['no_visitados'] += v_no_visitados
         total_general['pendientes'] += v_pendientes
         total_general['reagendados'] += v_reagendados
+        total_general['nuevos'] += v_nuevos
 
     pct_general = round(
         (total_general['visitados'] / total_general['lista'] * 100), 1
